@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Michael</string>
+    <string name="title_activity_main">Michael</string>
+    <string name="package_name">com.michael.ai</string>
+    <string name="custom_url_scheme">com.michael.ai</string>
+</resources>

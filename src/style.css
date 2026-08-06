@@ -1,0 +1,438 @@
+/* RESET & BASE STYLES */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  background-color: #0f0f17;
+  color: #f1f2f6;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* LOADER SCREEN */
+#loader {
+  position: fixed;
+  inset: 0;
+  background: #09090e;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.4s ease;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #6c5ce7;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+#loaderText {
+  color: #a29bfe;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+/* APP CONTAINER */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* HEADER & TABS */
+.app-header {
+  background: #141421;
+  border-bottom: 1px solid #2d2d42;
+  padding: 15px 25px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-title h1 {
+  font-size: 1.5rem;
+  color: #a29bfe;
+  letter-spacing: 1.5px;
+}
+
+.subtitle {
+  font-size: 0.8rem;
+  color: #b2bec3;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 10px;
+}
+
+.tab-btn {
+  background: #1e1e2f;
+  color: #b2bec3;
+  border: 1px solid #2d2d42;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: #2d2d42;
+  color: #fff;
+}
+
+.tab-btn.active {
+  background: #6c5ce7;
+  color: #fff;
+  border-color: #6c5ce7;
+  box-shadow: 0 0 10px rgba(108, 92, 231, 0.4);
+}
+
+/* MAIN VIEWS */
+.main-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.page-view {
+  display: none;
+  height: 100%;
+  padding: 25px;
+  overflow-y: auto;
+}
+
+.page-view.active {
+  display: flex;
+  flex-direction: column;
+}
+
+/* CHAT PAGE */
+#chatPage {
+  padding: 0;
+}
+
+.chat-box {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  background: #0f0f17;
+}
+
+/* MESSAGE BUBBLES */
+.message {
+  max-width: 75%;
+  padding: 12px 16px;
+  border-radius: 8px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.message.user {
+  align-self: flex-end;
+  background: #6c5ce7;
+  color: #fff;
+  border-bottom-right-radius: 2px;
+}
+
+.message.michael {
+  align-self: flex-start;
+  background: #1e1e2f;
+  border: 1px solid #2d2d42;
+  color: #dfe6e9;
+  border-bottom-left-radius: 2px;
+}
+
+.sender {
+  font-weight: bold;
+  font-size: 0.85rem;
+  display: block;
+  margin-bottom: 4px;
+  opacity: 0.8;
+}
+
+/* INPUT BAR */
+.input-area {
+  display: flex;
+  gap: 10px;
+  padding: 15px;
+  background: #141421;
+  border-top: 1px solid #2d2d42;
+}
+
+.input-area input {
+  flex: 1;
+  background: #1e1e2f;
+  border: 1px solid #2d2d42;
+  padding: 12px 16px;
+  border-radius: 6px;
+  color: #fff;
+  outline: none;
+  font-size: 0.95rem;
+}
+
+.input-area input:focus {
+  border-color: #6c5ce7;
+}
+
+.input-area button {
+  background: #6c5ce7;
+  color: #fff;
+  border: none;
+  padding: 0 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s;
+}
+
+.input-area button:hover {
+  background: #5b4bc4;
+}
+
+/* MIC BUTTON */
+#micBtn {
+  background: #1e1e2f;
+  border: 1px solid #2d2d42;
+  font-size: 1.1rem;
+}
+
+#micBtn.listening {
+  background: #e74c3c;
+  animation: pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+}
+
+/* NOTES & SETTINGS PAGE */
+textarea {
+  width: 100%;
+  height: 300px;
+  background: #1e1e2f;
+  border: 1px solid #2d2d42;
+  border-radius: 8px;
+  color: #fff;
+  padding: 15px;
+  margin-top: 15px;
+  resize: vertical;
+  outline: none;
+}
+
+textarea:focus {
+  border-color: #6c5ce7;
+}
+
+.setting-group {
+  margin-top: 20px;
+  background: #1e1e2f;
+  padding: 15px 20px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mute-btn {
+  background: #d63031;
+  color: #fff;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  width: fit-content;
+}
+
+/* SCROLLBAR STYLING */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0f0f17;
+}
+::-webkit-scrollbar-thumb {
+  background: #2d2d42;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6c5ce7;
+}
+/* Style raw input file elements */
+input[type="file"] {
+  color: #dfe6e9;
+  background: #1e1e2f;
+  padding: 6px;
+  border: 1px solid #3a3b5c;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* Style the inner "Choose File" button directly across WebKit/Blink browsers */
+input[type="file"]::file-selector-button {
+  background-color: #2d3436;
+  color: #dfe6e9;
+  border: 1px solid #636e72;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  margin-right: 10px;
+  transition: all 0.2s ease;
+}
+
+/* Hover state for the file chooser button */
+input[type="file"]::file-selector-button:hover {
+  background-color: #0984e3;
+  border-color: #74b9ff;
+  color: #ffffff;
+}
+
+/* General setting group container spacing */
+.setting-group {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-group label {
+  color: #a29bfe;
+  font-weight: bold;
+  font-size: 0.95rem;
+}
+.custom-select {
+  background-color: #1e1e2f;
+  color: #dfe6e9;
+  border: 1px solid #3a3b5c;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.custom-select:focus {
+  border-color: #6c5ce7;
+}
+.action-btn {
+  background-color: #e17055;
+  color: #ffffff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: background-color 0.2s ease;
+}
+
+.action-btn:hover {
+  background-color: #d63031;
+}
+/* Sliding Taskbar / Sidebar Styling */
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.slide-sidebar {
+  width: 260px;
+  background: #13131a;
+  border-right: 1px solid #2d2d42;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: -260px; /* Hidden by default off-screen */
+  z-index: 1000;
+  transition: left 0.3s ease-in-out;
+}
+
+.slide-sidebar.open {
+  left: 0; /* Slides into view */
+}
+
+.sidebar-header {
+  padding: 20px;
+  border-bottom: 1px solid #2d2d42;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sidebar-nav {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-nav button {
+  background: transparent;
+  border: none;
+  color: #b2bec3;
+  padding: 12px 15px;
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+}
+
+.sidebar-nav button:hover, .sidebar-nav button.active {
+  background: #6c5ce7;
+  color: #fff;
+}
+
+/* Toggle button to open the sidebar */
+#sidebarToggleBtn {
+  background: #2d2d42;
+  border: 1px solid #484860;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+/* Main Content Wrapper adjustment when sidebar toggles */
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  transition: margin-left 0.3s ease-in-out;
+}
