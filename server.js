@@ -34,6 +34,22 @@ app.post('/api/auth', (req, res) => {
   res.json({ token, success: true });
 });
 
+// CHAT ENDPOINT (Added to support your mobile app safely)
+app.post('/chat', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    console.log(`[CHAT RECEIVED] Prompt: ${prompt}`);
+
+    // Temporary or custom response logic for Michael
+    const reply = `Loud and clear, Captain! I processed your query: "${prompt || 'Hello'}". Systems are fully operational.`;
+
+    res.json({ response: reply });
+  } catch (err) {
+    console.error("[CHAT ERROR]:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // START SERVER
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`----------------------------------------`);
