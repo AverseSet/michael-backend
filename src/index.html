@@ -80,29 +80,19 @@
         button:hover {
             background-color: #0ea5e9;
         }
-        .music-toggle-btn {
-            background-color: #334155;
-            color: #f8fafc;
-            margin-top: 12px;
-        }
-        .music-toggle-btn:hover {
-            background-color: #475569;
-        }
         #error-msg {
             color: #f43f5e;
             text-align: center;
             font-size: 14px;
             margin-top: 16px;
         }
+        /* Hidden class to toggle views */
         .hidden {
             display: none !important;
         }
     </style>
 </head>
 <body>
-
-    <!-- Background Audio Player (Playlist Automated Loop) -->
-    <audio id="bg-music" preload="auto"></audio>
 
     <!-- Login View -->
     <div id="login-container" class="login-card">
@@ -118,9 +108,6 @@
             <button type="submit" id="login-btn">Log In</button>
         </form>
 
-        <!-- Only Stop/Play Music Button -->
-        <button type="button" id="music-toggle" class="music-toggle-btn">Stop Music</button>
-
         <div id="error-msg"></div>
     </div>
 
@@ -131,55 +118,12 @@
     <script type="module" src="/src/main.js"></script>
 
     <script>
-        // Playlist of 3 tracks cycling sequentially
-        const playlist = [
-            "./michael-bgm.mp3",
-            "./track2.mp3",
-            "./track3.mp3"
-        ];
-        
-        let currentTrackIndex = 0;
-        const bgMusic = document.getElementById('bg-music');
-        const musicToggleBtn = document.getElementById('music-toggle');
-        let isUserPaused = false;
-
-        function playTrack(index) {
-            bgMusic.src = playlist[index];
-            bgMusic.volume = 0.5;
-            bgMusic.play().then(() => {
-                if (!isUserPaused) musicToggleBtn.textContent = "Stop Music";
-            }).catch(() => {
-                musicToggleBtn.textContent = "Play Music";
-            });
-        }
-
-        // When a song ends, automatically move to the next one (loops back to 0 after track 3)
-        bgMusic.addEventListener('ended', () => {
-            currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
-            playTrack(currentTrackIndex);
-        });
-
-        // Initialize first track
-        playTrack(currentTrackIndex);
-
-        // Functional Stop/Play Music Button toggle
-        musicToggleBtn.addEventListener('click', () => {
-            if (bgMusic.paused) {
-                isUserPaused = false;
-                bgMusic.play();
-                musicToggleBtn.textContent = "Stop Music";
-            } else {
-                isUserPaused = true;
-                bgMusic.pause();
-                musicToggleBtn.textContent = "Play Music";
-            }
-        });
-
         const loginContainer = document.getElementById('login-container');
         const appContainer = document.getElementById('app');
         const form = document.getElementById('login-form');
         const errorDiv = document.getElementById('error-msg');
 
+        // Check if user is already logged in with a valid token
         const token = localStorage.getItem('michael_token');
         if (token) {
             loginContainer.classList.add('hidden');
@@ -193,6 +137,7 @@
             const accessKey = document.getElementById('accessKey').value.trim();
 
             try {
+                // Pointing to live Render backend instead of localhost
                 const response = await fetch('https://michael-backend-foz7.onrender.com/api/auth', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -205,8 +150,10 @@
                     throw new Error(data.error || "Login failed.");
                 }
 
+                // Save token valid through 2030
                 localStorage.setItem('michael_token', data.token);
 
+                // Hide login card and reveal main app container
                 loginContainer.classList.add('hidden');
                 appContainer.classList.remove('hidden');
 

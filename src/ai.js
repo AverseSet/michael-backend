@@ -31,32 +31,34 @@ Maintain this tactical AI co-pilot identity at all times. Give direct, actionabl
 `;
 
 /**
- * Executes a query against the local Ollama instance running qwen2.5:1.5b
+ * Executes a query against your backend server
  * @param {string} userPrompt - Prompt typed or spoken by the user
  * @returns {Promise<string>} - Michael's response
  */
 export async function runQuery(userPrompt) {
   try {
-    const res = await fetch("http://localhost:11434/api/generate", {
+    const token = localStorage.getItem('michael_token') || '';
+    
+    const res = await fetch("https://michael-backend-foz7.onrender.com/chat", {
       method: "POST",
       headers: { 
-        "Content-Type": "application/json" 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
       },
       body: JSON.stringify({
-        model: "qwen2.5:1.5b",
-        prompt: `${SYSTEM_PROMPT}\n\nUser Question: ${userPrompt}\nMichael:`,
-        stream: false
+        prompt: userPrompt
       })
     });
 
     if (!res.ok) {
-      throw new Error(`Ollama API error: ${res.statusText}`);
+      const errorText = await res.text();
+      throw new Error(`Server error (${res.status}): ${errorText}`);
     }
 
     const data = await res.json();
-    return data.response.trim();
+    return (data.response || data.reply || data.message || "").trim();
   } catch (err) {
     console.error("AI Generation Failure:", err);
-    return "Captain, I experienced a communication breakdown connecting to my internal reasoning engine (Ollama). Please verify Ollama is running locally.";
+    return `Captain, chat error: ${err.message}`;
   }
 }

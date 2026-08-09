@@ -266,7 +266,7 @@ if (document.readyState === "loading") {
 
 initBGM();
 
-// 3. PIPER TTS ENGINE
+// 3. PIPER TTS ENGINE (Updated with Render Cloud Backend URL)
 async function speakText(text) {
   try {
     if (currentPlayingAudio) {
@@ -274,7 +274,7 @@ async function speakText(text) {
       currentPlayingAudio.currentTime = 0;
     }
 
-    const response = await fetchWithAuth(`http://localhost:10000/api/tts?t=${Date.now()}`, {
+    const response = await fetchWithAuth(`https://michael-backend-foz7.onrender.com/api/tts?t=${Date.now()}`, {
       method: "POST",
       body: JSON.stringify({ text })
     });
@@ -312,12 +312,10 @@ function addMessage(sender, text) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-async function handleSendMessage() {
-  const text = userInput.value.trim();
+async function processUserCommand(text) {
   if (!text) return;
 
   addMessage("user", text);
-  userInput.value = "";
 
   if (text.toLowerCase().startsWith("!mode ")) {
     const requestedMode = text.split(" ")[1].toLowerCase();
@@ -340,17 +338,25 @@ async function handleSendMessage() {
   speakText(response);
 }
 
+async function handleSendMessage() {
+  const text = userInput.value.trim();
+  if (!text) return;
+  userInput.value = "";
+  await processUserCommand(text);
+}
+
 sendBtn.onclick = handleSendMessage;
 userInput.onkeydown = (e) => { if (e.key === "Enter") handleSendMessage(); };
 
-// 5. STT (SPEECH-TO-TEXT) MICROPHONE CONTROL
+// 5. STT (SPEECH-TO-TEXT) MICROPHONE CONTROL & WAKE WORD LISTENER ("Yo Michael")
 const micBtn = document.getElementById("micBtn");
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 if (SpeechRecognition) {
   const recognition = new SpeechRecognition();
-  recognition.continuous = false;
-  recognition.interimResults = false;
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
 
   recognition.onstart = () => {
     micBtn.classList.add("listening");
@@ -360,14 +366,44 @@ if (SpeechRecognition) {
   recognition.onend = () => {
     micBtn.classList.remove("listening");
     micBtn.textContent = "🎤";
+    // Auto-restart continuous listening loop
+    try {
+      recognition.start();
+    } catch (e) {}
   };
 
   recognition.onresult = (event) => {
-    userInput.value = event.results[0][0].transcript;
-    handleSendMessage();
+    const transcript = event.results[event.results.length - 1][0].transcript.trim();
+    const lowerTranscript = transcript.toLowerCase();
+
+    // Check if wake word is uttered ("yo michael" or "hey michael")
+    if (lowerTranscript.startsWith("yo michael") || lowerTranscript.startsWith("hey michael")) {
+      const command = transcript.replace(/^(yo michael|hey michael)\s*/i, "").trim();
+      if (command.length > 0 && event.results[event.results.length - 1].isFinal) {
+        recognition.stop();
+        processUserCommand(command);
+      }
+    }
   };
 
-  micBtn.onclick = () => recognition.start();
+  // Start continuous wake-word listening on boot
+  try {
+    recognition.start();
+  } catch (e) {
+    console.log("Wake word listener auto-start deferred:", e);
+  }
+
+  // Manual button click fallback
+  micBtn.onclick = () => {
+    const singleRecognition = new SpeechRecognition();
+    singleRecognition.continuous = false;
+    singleRecognition.interimResults = false;
+    singleRecognition.onresult = (e) => {
+      userInput.value = e.results[0][0].transcript;
+      handleSendMessage();
+    };
+    singleRecognition.start();
+  };
 } else {
   micBtn.onclick = () => alert("Speech recognition unsupported in this browser.");
 }

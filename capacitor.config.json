@@ -1,5 +1,12 @@
 {
   "appId": "com.michael.ai",
   "appName": "Michael",
-  "webDir": "public"
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
 }
