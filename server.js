@@ -1,55 +1,49 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import fetch from 'node-fetch';
 
 const app = express();
-app.use(express.json());
+const PORT = process.env.PORT || 3000;
+
 app.use(cors());
+app.use(express.json());
 
-const PORT = process.env.PORT || 10000;
-const SECRET_KEY = process.env.SECRET_KEY || 'your_secret_key_here';
-
-// AUTHENTICATION ENDPOINT (Access Key Only)
-app.post('/api/auth', (req, res) => {
-  const { accessKey } = req.body;
-
-  // Strict check for "AA"
-  if (accessKey !== 'AA') {
-    return res.status(401).json({ error: "Invalid access key. Just type AA" });
-  }
-
-  // Generate JWT token valid until 2030 (approx 5 years)
-  const token = jwt.sign(
-    { user: 'MichaelUser' },
-    SECRET_KEY,
-    { expiresIn: '1825d' }
-  );
-
-  console.log(`[AUTH SUCCESS] Access granted via key 'AA' (valid until 2030).`);
-  res.json({ token, success: true });
+// TEST ROUTE
+app.get('/', (req, res) => {
+  res.send('Michael Backend Server is live and running!');
 });
 
-// CHAT ENDPOINT (Dynamic Qwen 2.5 Echo & Response)
+// CHAT ENDPOINT (Live Qwen 2.5 Integration)
 app.post('/chat', async (req, res) => {
   try {
     const { prompt } = req.body;
     console.log(`[CHAT RECEIVED] Prompt: ${prompt}`);
 
-    let reply = "";
-    const lowerPrompt = (prompt || "").trim().toLowerCase();
+    // Call Qwen 2.5 via OpenRouter API
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "qwen/qwen-2.5-7b-instruct", // Live Qwen 2.5 model
+        messages: [
+          { role: "system", content: "You are Michael, a helpful AI assistant and companion." },
+          { role: "user", content: prompt }
+        ]
+      })
+    });
 
-    if (lowerPrompt === "hi" || lowerPrompt === "hello") {
-      reply = "Hello, Captain! How can I assist you today?";
+    const data = await response.json();
+    
+    if (data.choices && data.choices.length > 0) {
+      const reply = data.choices[0].message.content;
+      res.json({ response: reply });
     } else {
-      reply = `Qwen 2.5 processed your query: "${prompt}". Systems are fully operational.`;
+      res.status(500).json({ error: "Failed to get response from Qwen API", details: data });
     }
 
-    res.json({ response: reply });
   } catch (err) {
     console.error("[CHAT ERROR]:", err);
     res.status(500).json({ error: err.message });
@@ -58,8 +52,8 @@ app.post('/chat', async (req, res) => {
 
 // START SERVER
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`----------------------------------------`);
+  console.log('--------------------------------------------------');
   console.log(`✖ Michael Backend Server running on port ${PORT}`);
-  console.log(`🌐 Ready for universal "AA" mobile connections`);
-  console.log(`----------------------------------------`);
+  console.log(`🌐 Ready for universal mobile connections`);
+  console.log('--------------------------------------------------');
 });
