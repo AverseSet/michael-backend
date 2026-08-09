@@ -4,97 +4,19 @@ import { handleCommand } from "./commands.js";
 import { initBGM, setBGMMode, stopBGM } from "./bgm.js";
 import { gameProfiles } from "./gamesConfig.js";
 
-// --- TOKEN MANAGEMENT CONFIG & FUNCTIONS ---
-const TOKEN_KEY = 'auth_token';
-const REFRESH_TOKEN_KEY = 'refresh_token';
+// --- TOKEN & AUTH HELPER ---
+const TOKEN_KEY = 'michael_token';
 
-// 1. Save Tokens securely to localStorage
-function saveTokens(accessToken, refreshToken) {
-    if (accessToken) {
-        localStorage.setItem(TOKEN_KEY, accessToken);
-    }
-    if (refreshToken) {
-        localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-    }
-    console.log("Tokens saved successfully.");
-}
-
-// 2. Retrieve Access Token
 function getAccessToken() {
     return localStorage.getItem(TOKEN_KEY);
 }
 
-// 3. Decode JWT Token payload (to check expiration without libraries)
-function parseJwt(token) {
-    try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(
-            atob(base64)
-                .split('')
-                .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-                .join('')
-        );
-        return JSON.parse(jsonPayload);
-    } catch (error) {
-        console.error("Failed to parse JWT:", error);
-        return null;
-    }
-}
-
-// 4. Check if the token is expired
-function isTokenExpired(token) {
-    const decoded = parseJwt(token);
-    if (!decoded || !decoded.exp) {
-        return true; // Treat invalid/unparseable tokens as expired
-    }
-    const currentTime = Date.now() / 1000;
-    return decoded.exp < currentTime;
-}
-
-// 5. Refresh Token Logic
-async function refreshAccessToken() {
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    if (!refreshToken) return false;
-
-    try {
-        const response = await fetch('http://localhost:5000/api/auth/refresh', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken })
-        });
-
-        if (!response.ok) return false;
-
-        const data = await response.json();
-        saveTokens(data.accessToken, data.refreshToken);
-        return true;
-    } catch (error) {
-        console.error("Error refreshing token:", error);
-        return false;
-    }
-}
-
-// 6. Clear tokens and show login modal
-function handleLogout() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    console.log("Logged out. Tokens cleared.");
-    showLoginModal();
-}
-
-// 7. Authenticated Fetch Wrapper
+// Authenticated Fetch Wrapper matching your HTML token storage
 async function fetchWithAuth(url, options = {}) {
     let token = getAccessToken();
 
-    if (!token || isTokenExpired(token)) {
-        console.warn("Token expired or missing. Attempting refresh...");
-        const refreshed = await refreshAccessToken();
-        if (!refreshed) {
-            handleLogout();
-            throw new Error("Session expired. Please log in again.");
-        }
-        token = getAccessToken();
+    if (!token) {
+        throw new Error("No authentication token found. Please log in.");
     }
 
     options.headers = {
@@ -106,13 +28,13 @@ async function fetchWithAuth(url, options = {}) {
     const response = await fetch(url, options);
     
     if (response.status === 401) {
-        handleLogout();
+        localStorage.removeItem(TOKEN_KEY);
+        window.location.reload();
         throw new Error("Unauthorized access. Logging out.");
     }
 
     return response;
 }
-// --- END OF TOKEN MANAGEMENT ---
 
 let currentPlayingAudio = null;
 let liveVisionActive = false;
@@ -146,22 +68,11 @@ const deploymentGreetings = [
 
 const randomGreeting = deploymentGreetings[Math.floor(Math.random() * deploymentGreetings.length)];
 
-// 2. RENDER FULL APPLICATION UI WITH FULL-SCREEN BLACK DUAL-INPUT LOGIN MODAL
+// 2. RENDER FULL APPLICATION UI INSIDE #app (INCLUDING LOADER)
 document.querySelector("#app").innerHTML = `
   <div id="loader">
     <div class="spinner"></div>
     <p id="loaderText">Initializing Michael AI Systems...</p>
-  </div>
-
-  <!-- FULL-SCREEN BLACK LOGIN MODAL OVERLAY -->
-  <div id="loginModal" class="login-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000000; z-index: 9999; justify-content: center; align-items: center;">
-    <div class="login-modal-box" style="background: #181824; border: 1px solid #6c5ce7; padding: 35px; border-radius: 12px; width: 380px; text-align: center; box-shadow: 0 8px 32px rgba(108, 92, 231, 0.4);">
-      <h2 style="color: #fff; margin-bottom: 10px;">🛡️ Authentication Required</h2>
-      <p style="color: #b2bec3; font-size: 0.9rem; margin-bottom: 20px;">Enter your username and key to establish neural link with Michael AI.</p>
-      <input type="text" id="usernameInput" placeholder="Enter username..." style="width: 100%; padding: 10px; background: #0f0f17; border: 1px solid #2d2d42; color: #fff; border-radius: 6px; margin-bottom: 12px; box-sizing: border-box;" />
-      <input type="password" id="authKeyInput" placeholder="Enter key..." style="width: 100%; padding: 10px; background: #0f0f17; border: 1px solid #2d2d42; color: #fff; border-radius: 6px; margin-bottom: 15px; box-sizing: border-box;" />
-      <button id="submitTokenBtn" style="width: 100%; padding: 10px; background: #6c5ce7; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Connect Protocol</button>
-    </div>
   </div>
 
   <div class="app-container">
@@ -174,6 +85,7 @@ document.querySelector("#app").innerHTML = `
       <nav class="sidebar-nav">
         <button id="navChat" class="active">💬 Chat & Vision</button>
         <button id="navGames">🎮 Game Profiles</button>
+        <button id="navTutorial">📖 Tutorial</button>
         <button id="navNotes">📝 Captain's Notes</button>
         <button id="navSettings">⚙️ Settings</button>
       </nav>
@@ -213,10 +125,11 @@ document.querySelector("#app").innerHTML = `
             </div>
           </div>
 
-          <div class="input-area">
-            <input type="text" id="userInput" placeholder="Ask Michael or speak your command..." />
-            <button id="micBtn" title="Speak to Michael">🎤</button>
-            <button id="sendBtn" class="action-btn">Send</button>
+          <!-- INPUT AREA -->
+          <div class="input-area" style="display: flex; align-items: center; gap: 10px;">
+            <input type="text" id="userInput" placeholder="Ask Michael or speak your command..." style="flex: 1;" />
+            <button id="micBtn" title="Speak to Michael" style="width: 45px; height: 42px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border-radius: 8px; background: #1e293b; border: 1px solid #475569; color: #fff; cursor: pointer;">🎤</button>
+            <button id="sendBtn" class="action-btn" style="width: 80px; height: 42px; padding: 0; font-size: 0.95rem; border-radius: 8px;">Send</button>
           </div>
         </div>
 
@@ -236,6 +149,29 @@ document.querySelector("#app").innerHTML = `
           </div>
         </div>
 
+        <!-- TUTORIAL VIEW -->
+        <div id="tutorialPage" class="page-view">
+          <h2>📖 Michael AI Captain's Tutorial</h2>
+          <p style="color: #b2bec3; margin-top: 5px;">Master your multi-game AI co-pilot with this quick operational guide.</p>
+          
+          <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 15px;">
+            <div style="background: #181824; padding: 15px; border-radius: 8px; border-left: 4px solid #38bdf8;">
+              <h3 style="color: #fff; margin-bottom: 5px;">1. Chat & Live Vision</h3>
+              <p style="color: #b2bec3; font-size: 0.9rem; line-height: 1.5;">Click <strong>Start Live Vision</strong> to stream your gameplay. Michael will poll snapshots and evaluate your session based on your active game configuration.</p>
+            </div>
+
+            <div style="background: #181824; padding: 15px; border-radius: 8px; border-left: 4px solid #6c5ce7;">
+              <h3 style="color: #fff; margin-bottom: 5px;">2. Game Profiles</h3>
+              <p style="color: #b2bec3; font-size: 0.9rem; line-height: 1.5;">Switch between supported titles under the <strong>Game Profiles</strong> tab to adapt Michael's tracking metrics to your current game.</p>
+            </div>
+
+            <div style="background: #181824; padding: 15px; border-radius: 8px; border-left: 4px solid #f43f5e;">
+              <h3 style="color: #fff; margin-bottom: 5px;">3. Modes & Soundtracks</h3>
+              <p style="color: #b2bec3; font-size: 0.9rem; line-height: 1.5;">Configure background audio tracks (Regular, Serious, and Awaken mode) in Settings. Use <code>!mode awaken</code> for real-time zero-delay visual alerts.</p>
+            </div>
+          </div>
+        </div>
+
         <!-- NOTES VIEW -->
         <div id="notesPage" class="page-view">
           <h2>📝 Captain's Notes</h2>
@@ -246,6 +182,13 @@ document.querySelector("#app").innerHTML = `
         <!-- SETTINGS VIEW -->
         <div id="settingsPage" class="page-view">
           <h2>⚙️ System & Audio Settings</h2>
+
+          <!-- CONTACT US ON DISCORD -->
+          <div class="setting-group" style="background: #181824; padding: 15px; border-radius: 8px; border: 1px solid #6c5ce7; margin-bottom: 20px;">
+            <label style="color: #38bdf8; font-weight: bold; display: block; margin-bottom: 5px;">💬 Contact Us on Discord</label>
+            <p style="color: #b2bec3; font-size: 0.85rem; margin-bottom: 10px;">Join our community server to get support, share feedback, and connect with other captains!</p>
+            <a href="https://discord.gg/cRXk3Pz8S" target="_blank" style="display: inline-block; padding: 8px 16px; background: #5865F2; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">Open Discord Invite</a>
+          </div>
 
           <!-- VISION STARTUP PREFERENCE -->
           <div class="setting-group">
@@ -302,67 +245,7 @@ document.querySelector("#app").innerHTML = `
   </div>
 `;
 
-// 3. INITIALIZATION & AUTH CHECK
-function checkAuthAndStart() {
-    const token = getAccessToken();
-    if (!token) {
-        showLoginModal();
-    }
-    initBGM();
-}
-
-function showLoginModal() {
-    const modal = document.getElementById("loginModal");
-    if (modal) modal.style.display = "flex";
-}
-
-function hideLoginModal() {
-    const modal = document.getElementById("loginModal");
-    if (modal) modal.style.display = "none";
-}
-
-// Handle login submission with username and key
-document.addEventListener("DOMContentLoaded", () => {
-    const submitBtn = document.getElementById("submitTokenBtn");
-    const usernameInput = document.getElementById("usernameInput");
-    const authKeyInput = document.getElementById("authKeyInput");
-
-    if (submitBtn && usernameInput && authKeyInput) {
-        submitBtn.onclick = async () => {
-            const username = usernameInput.value.trim();
-            const key = authKeyInput.value.trim();
-
-            if (!username || !key) {
-                alert("Please enter both username and key.");
-                return;
-            }
-
-            try {
-                const response = await fetch('http://localhost:5000/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, key })
-                });
-
-                if (!response.ok) {
-                    throw new Error("Invalid credentials");
-                }
-
-                const data = await response.json();
-                saveTokens(data.accessToken, data.refreshToken);
-                hideLoginModal();
-                usernameInput.value = "";
-                authKeyInput.value = "";
-            } catch (error) {
-                console.error("Login authentication error:", error);
-                alert("Authentication failed. Please check your username and key.");
-            }
-        };
-    }
-});
-
-checkAuthAndStart();
-
+// Loader Animation Sequence
 const loaderText = document.getElementById("loaderText");
 setTimeout(() => { if (loaderText) loaderText.textContent = "Loading speech engine..."; }, 1000);
 setTimeout(() => { if (loaderText) loaderText.textContent = "Connecting vision protocols..."; }, 2000);
@@ -381,7 +264,9 @@ if (document.readyState === "loading") {
   setTimeout(hideLoader, 3000);
 }
 
-// 4. PIPER TTS ENGINE (Updated with fetchWithAuth)
+initBGM();
+
+// 3. PIPER TTS ENGINE
 async function speakText(text) {
   try {
     if (currentPlayingAudio) {
@@ -389,7 +274,7 @@ async function speakText(text) {
       currentPlayingAudio.currentTime = 0;
     }
 
-    const response = await fetchWithAuth(`http://localhost:5000/api/tts?t=${Date.now()}`, {
+    const response = await fetchWithAuth(`http://localhost:10000/api/tts?t=${Date.now()}`, {
       method: "POST",
       body: JSON.stringify({ text })
     });
@@ -405,7 +290,7 @@ async function speakText(text) {
   }
 }
 
-// 5. CHAT AND COMMAND LOGIC
+// 4. CHAT AND COMMAND LOGIC
 const chatBox = document.getElementById("chatBox");
 const sendBtn = document.getElementById("sendBtn");
 const userInput = document.getElementById("userInput");
@@ -458,7 +343,7 @@ async function handleSendMessage() {
 sendBtn.onclick = handleSendMessage;
 userInput.onkeydown = (e) => { if (e.key === "Enter") handleSendMessage(); };
 
-// 6. STT (SPEECH-TO-TEXT) MICROPHONE CONTROL
+// 5. STT (SPEECH-TO-TEXT) MICROPHONE CONTROL
 const micBtn = document.getElementById("micBtn");
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -469,7 +354,7 @@ if (SpeechRecognition) {
 
   recognition.onstart = () => {
     micBtn.classList.add("listening");
-    micBtn.textContent = "🎙️ Listening...";
+    micBtn.textContent = "🎙️";
   };
 
   recognition.onend = () => {
@@ -487,7 +372,7 @@ if (SpeechRecognition) {
   micBtn.onclick = () => alert("Speech recognition unsupported in this browser.");
 }
 
-// 7. REAL-TIME & ZERO-DELAY DYNAMIC VISION ENGINE
+// 6. REAL-TIME & ZERO-DELAY DYNAMIC VISION ENGINE
 async function startVisionStream() {
   const toggleBtn = document.getElementById("toggleVisionBtn");
   const visionStatus = document.getElementById("visionStatus");
@@ -581,7 +466,7 @@ document.getElementById("toggleVisionBtn").onclick = () => {
   else stopVisionStream();
 };
 
-// 8. GAME PROFILE SWITCHER LOGIC
+// 7. GAME PROFILE SWITCHER LOGIC
 const gameSelect = document.getElementById("gameProfileSelect");
 const activeGameTitle = document.getElementById("activeGameTitle");
 const gameContextDesc = document.getElementById("gameContextDesc");
@@ -608,7 +493,7 @@ function updateGameUI(key) {
   if (gameContextDesc) gameContextDesc.textContent = profile.levelInfo;
 }
 
-// 9. SIDEBAR & VIEW NAVIGATION CONTROLS
+// 8. SIDEBAR & VIEW NAVIGATION CONTROLS
 const sidebar = document.getElementById("slideSidebar");
 const toggleBtn = document.getElementById("sidebarToggleBtn");
 const closeBtn = document.getElementById("closeSidebarBtn");
@@ -623,6 +508,7 @@ if (closeBtn && sidebar) {
 const views = {
   navChat: document.getElementById("chatPage"),
   navGames: document.getElementById("gamesPage"),
+  navTutorial: document.getElementById("tutorialPage"),
   navNotes: document.getElementById("notesPage"),
   navSettings: document.getElementById("settingsPage")
 };
@@ -646,7 +532,7 @@ const notesTextarea = document.getElementById("notesTextarea");
 notesTextarea.value = localStorage.getItem("michael_notes") || "";
 notesTextarea.oninput = () => localStorage.setItem("michael_notes", notesTextarea.value);
 
-// 10. SOUNDTRACK & AUDIO CONTROLS
+// 9. SOUNDTRACK & AUDIO CONTROLS
 function setupAudioUploads() {
   const audioInputs = {
     regularAudioInput: { mode: "regular", labelId: "regularFileName" },
@@ -718,7 +604,7 @@ function switchModeWithFeedback(mode) {
 
 setupAudioUploads();
 
-// 11. VISION AUTO-START PREFERENCE LOGIC
+// 10. VISION AUTO-START PREFERENCE LOGIC
 const visionSelect = document.getElementById("visionAutoStartSelect");
 const visionHint = document.getElementById("visionModeHint");
 
@@ -751,6 +637,5 @@ if (savedVisionPref === "auto") {
   });
 }
 
-// Export token utilities if needed elsewhere in your app
-export { saveTokens, getAccessToken, fetchWithAuth, isTokenExpired, handleLogout };
+export { getAccessToken, fetchWithAuth };
 window.fetchWithAuth = fetchWithAuth;

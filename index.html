@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Michael AI</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .login-card {
+            background-color: #1e293b;
+            padding: 30px;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            border: 1px solid #334155;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 8px;
+            color: #38bdf8;
+            font-size: 24px;
+        }
+        p.subtitle {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .input-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            font-size: 13px;
+            color: #cbd5e1;
+            margin-bottom: 6px;
+        }
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            background-color: #0f172a;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus {
+            border-color: #38bdf8;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #38bdf8;
+            color: #0f172a;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0ea5e9;
+        }
+        #error-msg {
+            color: #f43f5e;
+            text-align: center;
+            font-size: 14px;
+            margin-top: 16px;
+        }
+        /* Hidden class to toggle views */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Login View -->
+    <div id="login-container" class="login-card">
+        <h2>Michael AI</h2>
+        <p class="subtitle">Enter your access key to continue<br><strong>Type 'AA' To access</strong></p>
+        
+        <form id="login-form">
+            <div class="input-group">
+                <label for="accessKey">Access Key</label>
+                <input type="password" id="accessKey" value="AA" placeholder="Type AA" required autocomplete="current-password">
+            </div>
+            
+            <button type="submit" id="login-btn">Log In</button>
+        </form>
+
+        <div id="error-msg"></div>
+    </div>
+
+    <!-- Main App Container (Loaded after successful auth) -->
+    <div id="app" class="hidden"></div>
+
+    <!-- Load your main JS entry point -->
+    <script type="module" src="/src/main.js"></script>
+
+    <script>
+        const loginContainer = document.getElementById('login-container');
+        const appContainer = document.getElementById('app');
+        const form = document.getElementById('login-form');
+        const errorDiv = document.getElementById('error-msg');
+
+        // Check if user is already logged in with a valid token
+        const token = localStorage.getItem('michael_token');
+        if (token) {
+            loginContainer.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorDiv.textContent = "";
+
+            const accessKey = document.getElementById('accessKey').value.trim();
+
+            try {
+                const response = await fetch('http://localhost:10000/api/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ accessKey })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Login failed.");
+                }
+
+                // Save token valid through 2030
+                localStorage.setItem('michael_token', data.token);
+
+                // Hide login card and reveal main app container
+                loginContainer.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+
+            } catch (err) {
+                errorDiv.textContent = err.message;
+            }
+        });
+    </script>
+</body>
+</html>
