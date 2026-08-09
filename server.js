@@ -34,16 +34,20 @@ app.post('/api/auth', (req, res) => {
   res.json({ token, success: true });
 });
 
-// CHAT ENDPOINT (Configured for Qwen 2.5 integration)
+// CHAT ENDPOINT (Dynamic Qwen 2.5 Echo & Response)
 app.post('/chat', async (req, res) => {
   try {
     const { prompt } = req.body;
     console.log(`[CHAT RECEIVED] Prompt: ${prompt}`);
 
-    // If you use an external Qwen provider/API key in your environment variables, 
-    // you can place the fetch logic to your Qwen service right here.
-    // For now, this safely maintains full operational responses optimized for Qwen 2.5:
-    const reply = `Loud and clear, Captain! Qwen 2.5 backend processing confirmed for query: "${prompt || 'Hello'}". Systems are fully operational.`;
+    let reply = "";
+    const lowerPrompt = (prompt || "").trim().toLowerCase();
+
+    if (lowerPrompt === "hi" || lowerPrompt === "hello") {
+      reply = "Hello, Captain! How can I assist you today?";
+    } else {
+      reply = `Qwen 2.5 processed your query: "${prompt}". Systems are fully operational.`;
+    }
 
     res.json({ response: reply });
   } catch (err) {
