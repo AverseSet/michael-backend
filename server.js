@@ -13,6 +13,17 @@ app.get('/', (req, res) => {
   res.send('Michael Backend Server is live and running!');
 });
 
+// AUTH ENDPOINT (Updated to /auth to match frontend fetch)
+app.post('/auth', (req, res) => {
+  const { accessKey } = req.body;
+  
+  if (accessKey === 'AA') {
+    res.json({ token: 'michael_secure_token_123' });
+  } else {
+    res.status(401).json({ error: 'Invalid access key. Type "AA" to access.' });
+  }
+});
+
 // CHAT ENDPOINT (Live Qwen 2.5 Integration)
 app.post('/chat', async (req, res) => {
   try {
