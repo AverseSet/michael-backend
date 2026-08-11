@@ -42,6 +42,55 @@ let screenStream = null;
 let activeMode = "regular";
 let currentGameKey = localStorage.getItem("michael_game_profile") || "bloxfruits";
 
+// --- SEQUENTIAL BGM PLAYLIST ENGINE ---
+let playlistAudio = null;
+let currentPlaylistIndex = 1;
+const totalPlaylistTracks = 3;
+let currentVolumeLevel = parseFloat(localStorage.getItem("michael_bgm_volume")) || 1.0;
+
+function playNextPlaylistTrack() {
+    const trackKey = `michael_bgm_track_${currentPlaylistIndex}`;
+    const audioData = localStorage.getItem(trackKey);
+
+    if (audioData) {
+        if (playlistAudio) {
+            playlistAudio.pause();
+            playlistAudio = null;
+        }
+
+        playlistAudio = new Audio(audioData);
+        playlistAudio.volume = currentVolumeLevel;
+        
+        playlistAudio.play().then(() => {
+            const trackName = localStorage.getItem(`michael_bgm_name_${currentPlaylistIndex}`) || `Michael-BGM${currentPlaylistIndex}`;
+            console.log(`[BGM Playlist] Playing: ${trackName}`);
+        }).catch(err => {
+            console.log("[BGM Playlist] Playback blocked or failed:", err);
+        });
+
+        playlistAudio.onended = () => {
+            currentPlaylistIndex++;
+            if (currentPlaylistIndex > totalPlaylistTracks) {
+                currentPlaylistIndex = 1; // Loop back to track 1
+            }
+            playNextPlaylistTrack();
+        };
+    } else {
+        // Fallback: If current track isn't uploaded yet, try the next index up to total tracks
+        currentPlaylistIndex++;
+        if (currentPlaylistIndex <= totalPlaylistTracks) {
+            playNextPlaylistTrack();
+        } else {
+            currentPlaylistIndex = 1;
+        }
+    }
+}
+
+function initSequentialPlaylist() {
+    currentPlaylistIndex = 1;
+    playNextPlaylistTrack();
+}
+
 // 1. 20 UNIQUE DEPLOYMENT GREETINGS ROTATION
 const deploymentGreetings = [
   "Ready for deployment, Captain. Systems fully operational.",
@@ -68,7 +117,7 @@ const deploymentGreetings = [
 
 const randomGreeting = deploymentGreetings[Math.floor(Math.random() * deploymentGreetings.length)];
 
-// 2. RENDER FULL APPLICATION UI INSIDE #app (INCLUDING LOADER)
+// 2. RENDER FULL APPLICATION UI INSIDE #app (INCLUDING LOADER & PLAYLIST UI)
 document.querySelector("#app").innerHTML = `
   <div id="loader">
     <div class="spinner"></div>
@@ -167,7 +216,7 @@ document.querySelector("#app").innerHTML = `
 
             <div style="background: #181824; padding: 15px; border-radius: 8px; border-left: 4px solid #f43f5e;">
               <h3 style="color: #fff; margin-bottom: 5px;">3. Modes & Soundtracks</h3>
-              <p style="color: #b2bec3; font-size: 0.9rem; line-height: 1.5;">Configure background audio tracks (Regular, Serious, and Awaken mode) in Settings. Use <code>!mode awaken</code> for real-time zero-delay visual alerts.</p>
+              <p style="color: #b2bec3; font-size: 0.9rem; line-height: 1.5;">Configure background audio tracks and playlists in Settings. Use <code>!mode awaken</code> for real-time zero-delay visual alerts.</p>
             </div>
           </div>
         </div>
@@ -202,11 +251,43 @@ document.querySelector("#app").innerHTML = `
             </div>
           </div>
 
-          <!-- GLOBAL BGM MUTE -->
+          <!-- GLOBAL BGM VOLUME & MUTE CONTROL -->
           <div class="setting-group" style="margin-top: 20px;">
-            <label>🔊 Global Sound Control:</label>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px;">
+            <label>🔊 Global Sound & Volume Control:</label>
+            <div style="display: flex; align-items: center; gap: 15px; margin-top: 8px; flex-wrap: wrap;">
+              <input type="range" id="bgmVolumeSlider" min="0" max="1" step="0.05" value="${currentVolumeLevel}" style="flex: 1; cursor: pointer;" />
+              <span id="volumePercentageLabel" style="color: #38bdf8; font-family: monospace; min-width: 45px;">${Math.round(currentVolumeLevel * 100)}%</span>
               <button id="muteAudioBtn" class="action-btn" style="background: #d63031;">Stop BGM</button>
+            </div>
+          </div>
+
+          <!-- MICHAEL-BGM1 -->
+          <div class="setting-group">
+            <label>🎵 Michael-BGM1 (Track 1):</label>
+            <div class="custom-file-row">
+              <input type="file" id="bgm1AudioInput" accept="audio/*" />
+              <button id="playBgm1Btn" class="action-btn">▶️ Play BGM1</button>
+              <span id="bgm1FileName" class="file-name-label">No track selected</span>
+            </div>
+          </div>
+
+          <!-- MICHAEL-BGM2 -->
+          <div class="setting-group">
+            <label>🎵 Michael-BGM2 (Track 2):</label>
+            <div class="custom-file-row">
+              <input type="file" id="bgm2AudioInput" accept="audio/*" />
+              <button id="playBgm2Btn" class="action-btn">▶️ Play BGM2</button>
+              <span id="bgm2FileName" class="file-name-label">No track selected</span>
+            </div>
+          </div>
+
+          <!-- MICHAEL-BGM3 -->
+          <div class="setting-group">
+            <label>🎵 Michael-BGM3 (Track 3):</label>
+            <div class="custom-file-row">
+              <input type="file" id="bgm3AudioInput" accept="audio/*" />
+              <button id="playBgm3Btn" class="action-btn">▶️ Play BGM3</button>
+              <span id="bgm3FileName" class="file-name-label">No track selected</span>
             </div>
           </div>
 
@@ -259,9 +340,13 @@ const hideLoader = () => {
 };
 
 if (document.readyState === "loading") {
-  window.addEventListener("DOMContentLoaded", () => setTimeout(hideLoader, 3000));
+  window.addEventListener("DOMContentLoaded", () => {
+    setTimeout(hideLoader, 3000);
+    setTimeout(initSequentialPlaylist, 3200); // Auto-start sequence on boot
+  });
 } else {
   setTimeout(hideLoader, 3000);
+  setTimeout(initSequentialPlaylist, 3200);
 }
 
 initBGM();
@@ -366,7 +451,6 @@ if (SpeechRecognition) {
   recognition.onend = () => {
     micBtn.classList.remove("listening");
     micBtn.textContent = "🎤";
-    // Auto-restart continuous listening loop
     try {
       recognition.start();
     } catch (e) {}
@@ -376,7 +460,6 @@ if (SpeechRecognition) {
     const transcript = event.results[event.results.length - 1][0].transcript.trim();
     const lowerTranscript = transcript.toLowerCase();
 
-    // Check if wake word is uttered ("yo michael" or "hey michael")
     if (lowerTranscript.startsWith("yo michael") || lowerTranscript.startsWith("hey michael")) {
       const command = transcript.replace(/^(yo michael|hey michael)\s*/i, "").trim();
       if (command.length > 0 && event.results[event.results.length - 1].isFinal) {
@@ -386,14 +469,12 @@ if (SpeechRecognition) {
     }
   };
 
-  // Start continuous wake-word listening on boot
   try {
     recognition.start();
   } catch (e) {
     console.log("Wake word listener auto-start deferred:", e);
   }
 
-  // Manual button click fallback
   micBtn.onclick = () => {
     const singleRecognition = new SpeechRecognition();
     singleRecognition.continuous = false;
@@ -568,23 +649,59 @@ const notesTextarea = document.getElementById("notesTextarea");
 notesTextarea.value = localStorage.getItem("michael_notes") || "";
 notesTextarea.oninput = () => localStorage.setItem("michael_notes", notesTextarea.value);
 
-// 9. SOUNDTRACK & AUDIO CONTROLS
+// 9. SOUNDTRACK, PLAYLIST & VOLUME CONTROLS
 function setupAudioUploads() {
   const audioInputs = {
+    bgm1AudioInput: { trackNum: 1, labelId: "bgm1FileName" },
+    bgm2AudioInput: { trackNum: 2, labelId: "bgm2FileName" },
+    bgm3AudioInput: { trackNum: 3, labelId: "bgm3FileName" },
     regularAudioInput: { mode: "regular", labelId: "regularFileName" },
     seriousAudioInput: { mode: "serious", labelId: "seriousFileName" },
     awakenAudioInput: { mode: "awaken", labelId: "awakenFileName" }
   };
 
-  Object.values(audioInputs).forEach(({ mode, labelId }) => {
+  // Load saved file names for UI display
+  for (let i = 1; i <= 3; i++) {
+    const savedName = localStorage.getItem(`michael_bgm_name_${i}`);
+    const labelEl = document.getElementById(`bgm${i}FileName`);
+    if (savedName && labelEl) labelEl.textContent = savedName;
+  }
+
+  ["regular", "serious", "awaken"].forEach(mode => {
     const savedName = localStorage.getItem(`bgm_name_${mode}`);
-    const labelEl = document.getElementById(labelId);
+    const labelEl = document.getElementById(`${mode}FileName`);
     if (savedName && labelEl) labelEl.textContent = savedName;
   });
 
-  Object.entries(audioInputs).forEach(([inputId, { mode, labelId }]) => {
-    const inputEl = document.getElementById(inputId);
-    const labelEl = document.getElementById(labelId);
+  // Handle file selections for Michael-BGM1, 2, 3
+  for (let i = 1; i <= 3; i++) {
+    const inputEl = document.getElementById(`bgm${i}AudioInput`);
+    const labelEl = document.getElementById(`bgm${i}FileName`);
+
+    if (inputEl) {
+      inputEl.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(event) {
+            localStorage.setItem(`michael_bgm_track_${i}`, event.target.result);
+            localStorage.setItem(`michael_bgm_name_${i}`, file.name);
+            if (labelEl) labelEl.textContent = file.name;
+
+            const confirmMsg = `Saved ${file.name} as Michael-BGM${i}.`;
+            addMessage("michael", confirmMsg);
+            speakText(confirmMsg);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+    }
+  }
+
+  // Handle standard mode audio files
+  ["regular", "serious", "awaken"].forEach(mode => {
+    const inputEl = document.getElementById(`${mode}AudioInput`);
+    const labelEl = document.getElementById(`${mode}FileName`);
 
     if (inputEl) {
       inputEl.onchange = (e) => {
@@ -606,13 +723,38 @@ function setupAudioUploads() {
     }
   });
 
+  // Manual test buttons for BGM tracks
+  document.getElementById("playBgm1Btn").onclick = () => { currentPlaylistIndex = 1; playNextPlaylistTrack(); };
+  document.getElementById("playBgm2Btn").onclick = () => { currentPlaylistIndex = 2; playNextPlaylistTrack(); };
+  document.getElementById("playBgm3Btn").onclick = () => { currentPlaylistIndex = 3; playNextPlaylistTrack(); };
+
   document.getElementById("playRegularBtn").onclick = () => switchModeWithFeedback("regular");
   document.getElementById("playSeriousBtn").onclick = () => switchModeWithFeedback("serious");
   document.getElementById("playAwakenBtn").onclick = () => switchModeWithFeedback("awaken");
 
+  // Volume slider hookup
+  const volumeSlider = document.getElementById("bgmVolumeSlider");
+  const volumeLabel = document.getElementById("volumePercentageLabel");
+
+  if (volumeSlider) {
+    volumeSlider.oninput = (e) => {
+      currentVolumeLevel = parseFloat(e.target.value);
+      localStorage.setItem("michael_bgm_volume", currentVolumeLevel);
+      if (volumeLabel) volumeLabel.textContent = `${Math.round(currentVolumeLevel * 100)}%`;
+
+      if (playlistAudio) {
+        playlistAudio.volume = currentVolumeLevel;
+      }
+    };
+  }
+
   const muteBtn = document.getElementById("muteAudioBtn");
   if (muteBtn) {
     muteBtn.onclick = () => {
+      if (playlistAudio) {
+        playlistAudio.pause();
+        playlistAudio = null;
+      }
       stopBGM();
       const msg = "Background music stopped.";
       addMessage("michael", msg);
@@ -623,6 +765,10 @@ function setupAudioUploads() {
 
 function switchModeWithFeedback(mode) {
   activeMode = mode;
+  if (playlistAudio) {
+    playlistAudio.pause();
+    playlistAudio = null;
+  }
   const success = setBGMMode(mode);
 
   const modeLatencyText = document.getElementById("visionLatency");

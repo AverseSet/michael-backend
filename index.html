@@ -80,13 +80,27 @@
         button:hover {
             background-color: #0ea5e9;
         }
+        .music-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+        }
         .music-toggle-btn {
             background-color: #334155;
             color: #f8fafc;
-            margin-top: 12px;
+            margin-top: 0;
+            flex: 1;
         }
         .music-toggle-btn:hover {
             background-color: #475569;
+        }
+        .volume-slider {
+            width: 100px;
+            cursor: pointer;
+            padding: 0;
+            background: transparent;
+            border: none;
         }
         #error-msg {
             color: #f43f5e;
@@ -118,8 +132,11 @@
             <button type="submit" id="login-btn">Log In</button>
         </form>
 
-        <!-- Only Stop/Play Music Button -->
-        <button type="button" id="music-toggle" class="music-toggle-btn">Stop Music</button>
+        <!-- Music Control & Volume Slider Section -->
+        <div class="music-controls">
+            <button type="button" id="music-toggle" class="music-toggle-btn">Stop Music</button>
+            <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.05" value="0.5" title="Volume Slider">
+        </div>
 
         <div id="error-msg"></div>
     </div>
@@ -141,11 +158,12 @@
         let currentTrackIndex = 0;
         const bgMusic = document.getElementById('bg-music');
         const musicToggleBtn = document.getElementById('music-toggle');
+        const volumeSlider = document.getElementById('volume-slider');
         let isUserPaused = false;
 
         function playTrack(index) {
             bgMusic.src = playlist[index];
-            bgMusic.volume = 0.5;
+            bgMusic.volume = parseFloat(volumeSlider.value);
             bgMusic.play().then(() => {
                 if (!isUserPaused) musicToggleBtn.textContent = "Stop Music";
             }).catch(() => {
@@ -161,6 +179,11 @@
 
         // Initialize first track
         playTrack(currentTrackIndex);
+
+        // Volume slider adjustment logic
+        volumeSlider.addEventListener('input', (e) => {
+            bgMusic.volume = parseFloat(e.target.value);
+        });
 
         // Functional Stop/Play Music Button toggle
         musicToggleBtn.addEventListener('click', () => {

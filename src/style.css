@@ -436,3 +436,16 @@ input[type="file"]::file-selector-button:hover {
   width: 100%;
   transition: margin-left 0.3s ease-in-out;
 }
+
+/* REMOVE WHITE TRACK FROM VOLUME SLIDER */
+input[type="range"] {
+  background: transparent;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+input[type="range"]::-moz-range-track {
+  background: transparent;
+}
