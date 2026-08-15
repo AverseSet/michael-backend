@@ -8,12 +8,12 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// TEST ROUTE
+// TEST ROUTE - Fixed to return JSON so pings/clients never get plain text/HTML
 app.get('/', (req, res) => {
-  res.send('Michael Backend Server is live and running!');
+  res.json({ status: 'online', message: 'Michael Backend Server is live and running!' });
 });
 
-// AUTH ENDPOINT (Updated to /auth to match frontend fetch)
+// AUTH ENDPOINT
 app.post('/auth', (req, res) => {
   const { accessKey } = req.body;
   
@@ -30,7 +30,6 @@ app.post('/chat', async (req, res) => {
     const { prompt } = req.body;
     console.log(`[CHAT RECEIVED] Prompt: ${prompt}`);
 
-    // Call Qwen 2.5 via OpenRouter API
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -38,7 +37,7 @@ app.post('/chat', async (req, res) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "qwen/qwen-2.5-7b-instruct", // Live Qwen 2.5 model
+        model: "qwen/qwen-2.5-7b-instruct",
         messages: [
           { role: "system", content: "You are Michael, a helpful AI assistant and companion." },
           { role: "user", content: prompt }
@@ -59,6 +58,17 @@ app.post('/chat', async (req, res) => {
     console.error("[CHAT ERROR]:", err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// CATCH-ALL 404 HANDLER (Ensures missing routes return JSON instead of HTML)
+app.use((req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
+});
+
+// GLOBAL ERROR HANDLER (Prevents HTML stack traces on server crash)
+app.use((err, req, res, next) => {
+  console.error('[SERVER CRASH ERROR]:', err);
+  res.status(500).json({ error: 'Internal server error', details: err.message });
 });
 
 // START SERVER
