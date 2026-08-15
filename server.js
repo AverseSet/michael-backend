@@ -13,8 +13,8 @@ app.get('/', (req, res) => {
   res.json({ status: 'online', message: 'Michael Backend Server is live and running!' });
 });
 
-// AUTH ENDPOINT
-app.post('/auth', (req, res) => {
+// AUTH ENDPOINT (Supports both /auth and /login paths)
+app.post(['/auth', '/login'], (req, res) => {
   const { accessKey } = req.body;
   
   if (accessKey === 'AA') {
