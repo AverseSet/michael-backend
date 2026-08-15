@@ -8,21 +8,24 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// TEST ROUTE - Fixed to return JSON so pings/clients never get plain text/HTML
+// TEST / HEALTH CHECK ROUTE (Works for cron-job.org and browser checks)
 app.get('/', (req, res) => {
   res.json({ status: 'online', message: 'Michael Backend Server is live and running!' });
 });
 
-// AUTH ENDPOINT (Supports both /auth and /login paths)
-app.post(['/auth', '/login'], (req, res) => {
+// AUTHENTICATION ROUTES (Covers all possible frontend endpoint variations)
+const handleAuth = (req, res) => {
   const { accessKey } = req.body;
-  
   if (accessKey === 'AA') {
     res.json({ token: 'michael_secure_token_123' });
   } else {
     res.status(401).json({ error: 'Invalid access key. Type "AA" to access.' });
   }
-});
+};
+
+app.post('/auth', handleAuth);
+app.post('/login', handleAuth);
+app.post('/api/auth', handleAuth);
 
 // CHAT ENDPOINT (Live Qwen 2.5 Integration)
 app.post('/chat', async (req, res) => {
@@ -60,7 +63,7 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-// CATCH-ALL 404 HANDLER (Ensures missing routes return JSON instead of HTML)
+// CATCH-ALL 404 HANDLER (Ensures missing routes return clean JSON instead of HTML)
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
