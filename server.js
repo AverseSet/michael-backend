@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
+import { spawn } from 'child_process';
+import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -63,15 +65,45 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-// TTS ENDPOINT
+// TTS ENDPOINT (Piper CLI Integration)
 app.post('/api/tts', async (req, res) => {
   try {
     const { text } = req.body;
-    // Add your TTS synthesis logic or external service integration here
-    res.status(200).json({ status: 'success', message: 'TTS endpoint reached' });
+    if (!text) {
+      return res.status(400).json({ error: 'Text is required' });
+    }
+
+    const piperPath = path.resolve('./piper/piper');
+    const modelPath = path.resolve('./piper/en_US-lessac-medium.onnx');
+
+    res.setHeader('Content-Type', 'audio/wav');
+
+    const piperProcess = spawn(piperPath, [
+      '--model', modelPath,
+      '--output_file', '-'
+    ]);
+
+    piperProcess.stdin.write(text);
+    piperProcess.stdin.end();
+
+    piperProcess.stdout.pipe(res);
+
+    piperProcess.stderr.on('data', (data) => {
+      console.error(`[Piper Error]: ${data}`);
+    });
+
+    piperProcess.on('error', (err) => {
+      console.error('[Piper Process Error]:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
   } catch (err) {
     console.error('[TTS ERROR]:', err);
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 
