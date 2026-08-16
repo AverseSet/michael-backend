@@ -63,6 +63,18 @@ app.post('/chat', async (req, res) => {
   }
 });
 
+// TTS ENDPOINT
+app.post('/api/tts', async (req, res) => {
+  try {
+    const { text } = req.body;
+    // Add your TTS synthesis logic or external service integration here
+    res.status(200).json({ status: 'success', message: 'TTS endpoint reached' });
+  } catch (err) {
+    console.error('[TTS ERROR]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // CATCH-ALL 404 HANDLER (Ensures missing routes return clean JSON instead of HTML)
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
