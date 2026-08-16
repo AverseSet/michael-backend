@@ -1,8 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
-import { spawn } from 'child_process';
-import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -65,45 +63,18 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-// TTS ENDPOINT (Piper CLI Integration)
+// TTS ENDPOINT (Cloud-safe implementation preventing 500 crashes)
 app.post('/api/tts', async (req, res) => {
   try {
     const { text } = req.body;
     if (!text) {
       return res.status(400).json({ error: 'Text is required' });
     }
-
-    const piperPath = path.resolve('./piper/piper');
-    const modelPath = path.resolve('./piper/en_US-lessac-medium.onnx');
-
-    res.setHeader('Content-Type', 'audio/wav');
-
-    const piperProcess = spawn(piperPath, [
-      '--model', modelPath,
-      '--output_file', '-'
-    ]);
-
-    piperProcess.stdin.write(text);
-    piperProcess.stdin.end();
-
-    piperProcess.stdout.pipe(res);
-
-    piperProcess.stderr.on('data', (data) => {
-      console.error(`[Piper Error]: ${data}`);
-    });
-
-    piperProcess.on('error', (err) => {
-      console.error('[Piper Process Error]:', err);
-      if (!res.headersSent) {
-        res.status(500).json({ error: err.message });
-      }
-    });
-
+    
+    res.status(501).json({ error: 'Server TTS binary not configured on cloud environment. Use browser fallback.' });
   } catch (err) {
     console.error('[TTS ERROR]:', err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: err.message });
-    }
+    res.status(500).json({ error: err.message });
   }
 });
 
