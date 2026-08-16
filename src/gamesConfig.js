@@ -31,5 +31,21 @@ export const gameProfiles = {
         ? { alert: true, text: "🚨 EMERGENCY MEETING OR CRITICAL EVENT DETECTED!" } 
         : { alert: false, text: "Task monitoring active. Watch your vents." };
     }
+  },
+  "ninetynine": {
+    name: "99 Nights In The Forest (Roblox)",
+    levelInfo: "Survival mode | Objective: Manage fuel, warmth, and campfire stability",
+    awakenPromptCheck: (frameData) => {
+      let darkPixels = 0;
+      for (let i = 0; i < frameData.length; i += 16) {
+        // Scan for low light / darkness conditions threatening survival
+        if (frameData[i] < 40 && frameData[i + 1] < 40 && frameData[i + 2] < 40) {
+          darkPixels++;
+        }
+      }
+      return darkPixels > 3000 
+        ? { alert: true, text: "⚠️ LOW LIGHT / DARKNESS WARNING: Campfire fuel may be depleting!" } 
+        : { alert: false, text: "Campfire and survival telemetry stable." };
+    }
   }
 };

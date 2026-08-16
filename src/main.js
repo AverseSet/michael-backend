@@ -3,6 +3,8 @@ import { runQuery } from "./ai.js";
 import { handleCommand } from "./commands.js";
 import { initBGM, setBGMMode, stopBGM } from "./bgm.js";
 import { gameProfiles } from "./gamesConfig.js";
+import { saveCampfireLocation, getCampfireLocation, clearPermanentMemoryCompletely } from "./memory.js";
+import { initTacticalRecorder, stopTacticalRecorder } from "./recorder.js";
 
 // --- TOKEN & AUTH HELPER ---
 const TOKEN_KEY = 'michael_token';
@@ -36,11 +38,22 @@ async function fetchWithAuth(url, options = {}) {
     return response;
 }
 
-let currentPlayingAudio = null;
 let liveVisionActive = false;
 let screenStream = null;
 let activeMode = "regular";
 let currentGameKey = localStorage.getItem("michael_game_profile") || "bloxfruits";
+let isRecordingActive = false;
+
+// --- 99 NIGHTS CAMPFIRE STATE ---
+let campfireData = {
+  isLocated: false,
+  locationCoordinates: getCampfireLocation(),
+  fuelLevel: 100
+};
+
+if (campfireData.locationCoordinates) {
+  campfireData.isLocated = true;
+}
 
 // --- SEQUENTIAL BGM PLAYLIST ENGINE ---
 let playlistAudio = null;
@@ -71,12 +84,11 @@ function playNextPlaylistTrack() {
         playlistAudio.onended = () => {
             currentPlaylistIndex++;
             if (currentPlaylistIndex > totalPlaylistTracks) {
-                currentPlaylistIndex = 1; // Loop back to track 1
+                currentPlaylistIndex = 1;
             }
             playNextPlaylistTrack();
         };
     } else {
-        // Fallback: If current track isn't uploaded yet, try the next index up to total tracks
         currentPlaylistIndex++;
         if (currentPlaylistIndex <= totalPlaylistTracks) {
             playNextPlaylistTrack();
@@ -91,7 +103,6 @@ function initSequentialPlaylist() {
     playNextPlaylistTrack();
 }
 
-// 1. 20 UNIQUE DEPLOYMENT GREETINGS ROTATION
 const deploymentGreetings = [
   "Ready for deployment, Captain. Systems fully operational.",
   "All tactical protocols online. Let's hunt some bounties, Captain.",
@@ -109,7 +120,7 @@ const deploymentGreetings = [
   "Core AI initialized. Ready to assist your gameplay journey, Captain.",
   "Live feed ready. No threat escapes our notice today.",
   "All systems synchronized. Let's claim victory, Captain.",
-  "Network stable, co-pilot ready. What's our first objective?",
+  "Network stable, co-pilot ready. What's first objective?",
   "Combat assistance online. Let's clear out the opposition.",
   "Readiness check complete. Michael standing by for tactical command.",
   "Power levels nominal. Let's conquer the match, Captain."
@@ -117,15 +128,14 @@ const deploymentGreetings = [
 
 const randomGreeting = deploymentGreetings[Math.floor(Math.random() * deploymentGreetings.length)];
 
-// 2. RENDER FULL APPLICATION UI INSIDE #app (INCLUDING LOADER & PLAYLIST UI)
+// RENDER FULL APPLICATION UI INSIDE #app
 document.querySelector("#app").innerHTML = `
-  <div id="loader">
+  <div id="loader" style="opacity: 0; display: none;">
     <div class="spinner"></div>
     <p id="loaderText">Initializing Michael AI Systems...</p>
   </div>
 
   <div class="app-container">
-    <!-- SLIDING TASKBAR / SIDEBAR -->
     <aside id="slideSidebar" class="slide-sidebar">
       <div class="sidebar-header">
         <h3>⚔️ Menu</h3>
@@ -152,15 +162,19 @@ document.querySelector("#app").innerHTML = `
       </header>
 
       <main class="main-content">
-        <!-- CHAT VIEW -->
         <div id="chatPage" class="page-view active">
-          <!-- REAL-TIME VISION HUD -->
           <div class="live-vision-bar" style="display: flex; justify-content: space-between; align-items: center; background: #181824; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #2d2d42;">
             <div style="display: flex; align-items: center; gap: 10px;">
               <button id="toggleVisionBtn" class="action-btn">🎥 Start Live Vision</button>
+              <button id="toggleRecordBtn" class="action-btn" style="background: #d63031; display: none;">🔴 Record Session</button>
               <span id="visionStatus" style="color: #b2bec3; font-weight: bold; font-size: 0.9rem;">Live Feed: OFF</span>
             </div>
-            <span id="visionLatency" style="color: #74b9ff; font-size: 0.85rem; font-family: monospace;">Mode: STANDARD</span>
+            <div style="display: flex; align-items: center; gap: 15px;">
+              <div id="campfireHud" style="display: none; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; color: #fff; border: 1px solid #ff4500;">
+                🔥 Campfire: <span id="fireMeterText">${campfireData.isLocated ? "Tracked" : "Not Found"}</span>
+              </div>
+              <span id="visionLatency" style="color: #74b9ff; font-size: 0.85rem; font-family: monospace;">Mode: STANDARD</span>
+            </div>
           </div>
 
           <div id="liveFeedBox" style="background: #0f0f17; padding: 10px 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #6c5ce7;">
@@ -174,7 +188,6 @@ document.querySelector("#app").innerHTML = `
             </div>
           </div>
 
-          <!-- INPUT AREA -->
           <div class="input-area" style="display: flex; align-items: center; gap: 10px;">
             <input type="text" id="userInput" placeholder="Ask Michael or speak your command..." style="flex: 1;" />
             <button id="micBtn" title="Speak to Michael" style="width: 45px; height: 42px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border-radius: 8px; background: #1e293b; border: 1px solid #475569; color: #fff; cursor: pointer;">🎤</button>
@@ -182,7 +195,6 @@ document.querySelector("#app").innerHTML = `
           </div>
         </div>
 
-        <!-- GAMES VIEW -->
         <div id="gamesPage" class="page-view">
           <h2>🎮 Active Game Context</h2>
           <div class="setting-group" style="margin-top: 15px;">
@@ -190,6 +202,7 @@ document.querySelector("#app").innerHTML = `
             <select id="gameProfileSelect" class="custom-select" style="margin-top: 5px; width: 100%;">
               <option value="bloxfruits">Blox Fruits (Roblox)</option>
               <option value="amongus">Among Us</option>
+              <option value="ninetynine">99 Nights In The Forest (Roblox)</option>
             </select>
           </div>
           <div id="gameContextDetails" style="margin-top: 20px; background: #1e1e2f; padding: 20px; border-radius: 8px;">
@@ -198,7 +211,6 @@ document.querySelector("#app").innerHTML = `
           </div>
         </div>
 
-        <!-- TUTORIAL VIEW -->
         <div id="tutorialPage" class="page-view">
           <h2>📖 Michael AI Captain's Tutorial</h2>
           <p style="color: #b2bec3; margin-top: 5px;">Master your multi-game AI co-pilot with this quick operational guide.</p>
@@ -221,25 +233,27 @@ document.querySelector("#app").innerHTML = `
           </div>
         </div>
 
-        <!-- NOTES VIEW -->
         <div id="notesPage" class="page-view">
           <h2>📝 Captain's Notes</h2>
           <p style="color: #b2bec3;">Jot down strategies, task lists, or trade plans:</p>
           <textarea id="notesTextarea" placeholder="Type your tactical notes here..."></textarea>
         </div>
 
-        <!-- SETTINGS VIEW -->
         <div id="settingsPage" class="page-view">
           <h2>⚙️ System & Audio Settings</h2>
 
-          <!-- CONTACT US ON DISCORD -->
+          <div class="setting-group" style="background: #181824; padding: 15px; border-radius: 8px; border: 1px solid #d63031; margin-bottom: 20px;">
+            <label style="color: #ff7675; font-weight: bold; display: block; margin-bottom: 5px;">⚠️ Permanent Memory Management</label>
+            <p style="color: #b2bec3; font-size: 0.85rem; margin-bottom: 10px;">Wipe permanent long-term memory data (such as campfire location anchors and saved player states).</p>
+            <button id="openClearMemoryModalBtn" class="action-btn" style="background: #d63031;">Clear Memory</button>
+          </div>
+
           <div class="setting-group" style="background: #181824; padding: 15px; border-radius: 8px; border: 1px solid #6c5ce7; margin-bottom: 20px;">
             <label style="color: #38bdf8; font-weight: bold; display: block; margin-bottom: 5px;">💬 Contact Us on Discord</label>
             <p style="color: #b2bec3; font-size: 0.85rem; margin-bottom: 10px;">Join our community server to get support, share feedback, and connect with other captains!</p>
             <a href="https://discord.gg/cRXk3Pz8S" target="_blank" style="display: inline-block; padding: 8px 16px; background: #5865F2; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">Open Discord Invite</a>
           </div>
 
-          <!-- VISION STARTUP PREFERENCE -->
           <div class="setting-group">
             <label>👁️ Live Vision Startup Behavior:</label>
             <div style="display: flex; align-items: center; gap: 15px; margin-top: 8px;">
@@ -251,7 +265,6 @@ document.querySelector("#app").innerHTML = `
             </div>
           </div>
 
-          <!-- GLOBAL BGM VOLUME & MUTE CONTROL -->
           <div class="setting-group" style="margin-top: 20px;">
             <label>🔊 Global Sound & Volume Control:</label>
             <div style="display: flex; align-items: center; gap: 15px; margin-top: 8px; flex-wrap: wrap;">
@@ -261,7 +274,6 @@ document.querySelector("#app").innerHTML = `
             </div>
           </div>
 
-          <!-- MICHAEL-BGM1 -->
           <div class="setting-group">
             <label>🎵 Michael-BGM1 (Track 1):</label>
             <div class="custom-file-row">
@@ -271,7 +283,6 @@ document.querySelector("#app").innerHTML = `
             </div>
           </div>
 
-          <!-- MICHAEL-BGM2 -->
           <div class="setting-group">
             <label>🎵 Michael-BGM2 (Track 2):</label>
             <div class="custom-file-row">
@@ -281,7 +292,6 @@ document.querySelector("#app").innerHTML = `
             </div>
           </div>
 
-          <!-- MICHAEL-BGM3 -->
           <div class="setting-group">
             <label>🎵 Michael-BGM3 (Track 3):</label>
             <div class="custom-file-row">
@@ -291,7 +301,6 @@ document.querySelector("#app").innerHTML = `
             </div>
           </div>
 
-          <!-- REGULAR MODE -->
           <div class="setting-group">
             <label>🎵 Regular Mode Sound:</label>
             <div class="custom-file-row">
@@ -301,7 +310,6 @@ document.querySelector("#app").innerHTML = `
             </div>
           </div>
 
-          <!-- SERIOUS MODE -->
           <div class="setting-group">
             <label>⚡ Serious Mode Sound:</label>
             <div class="custom-file-row">
@@ -311,7 +319,6 @@ document.querySelector("#app").innerHTML = `
             </div>
           </div>
 
-          <!-- AWAKEN MODE -->
           <div class="setting-group">
             <label>🔥 Awaken Mode Sound:</label>
             <div class="custom-file-row">
@@ -322,60 +329,76 @@ document.querySelector("#app").innerHTML = `
           </div>
         </div>
       </main>
+
+      <footer style="text-align: center; padding: 10px; font-size: 11px; color: #888; border-top: 1px solid #1f1f2e; background: #12121c;">
+        Michael is AI and answers can be wrong.
+      </footer>
+    </div>
+  </div>
+
+  <div id="clearMemoryModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center;">
+    <div style="background: #1e1e2f; padding: 25px; border-radius: 10px; text-align: center; max-width: 320px; border: 1px solid #475569; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+      <p style="margin-bottom: 20px; font-size: 0.95rem; color: #fff; line-height: 1.5;">Are you sure you want to clear this? Can't be undone?</p>
+      <div style="display: flex; justify-content: center; gap: 10px;">
+        <button id="confirmClearMemoryBtn" style="background: #d63031; color: white; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-weight: bold;">Okay</button>
+        <button id="cancelClearMemoryBtn" style="background: #475569; color: white; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer;">Cancel</button>
+      </div>
     </div>
   </div>
 `;
 
-// Loader Animation Sequence
+const loader = document.getElementById("loader");
 const loaderText = document.getElementById("loaderText");
-setTimeout(() => { if (loaderText) loaderText.textContent = "Loading speech engine..."; }, 1000);
-setTimeout(() => { if (loaderText) loaderText.textContent = "Connecting vision protocols..."; }, 2000);
 
-const hideLoader = () => {
-  const loader = document.getElementById("loader");
-  if (loader) {
+if (loader) {
+  loader.style.display = "flex";
+  loader.style.opacity = "1";
+
+  if (loaderText) loaderText.textContent = "Initializing Michael AI Systems...";
+
+  setTimeout(() => {
+    if (loaderText) loaderText.textContent = "Calibrating Video Vision & Frame Analyzers...";
+  }, 1000);
+
+  setTimeout(() => {
+    if (loaderText) loaderText.textContent = "Establishing Neural Uplink...";
+  }, 2000);
+
+  setTimeout(() => {
     loader.style.opacity = "0";
-    setTimeout(() => { loader.style.display = "none"; }, 400);
-  }
-};
-
-if (document.readyState === "loading") {
-  window.addEventListener("DOMContentLoaded", () => {
-    setTimeout(hideLoader, 3000);
-    setTimeout(initSequentialPlaylist, 3200); // Auto-start sequence on boot
-  });
-} else {
-  setTimeout(hideLoader, 3000);
-  setTimeout(initSequentialPlaylist, 3200);
+    setTimeout(() => { loader.style.display = "none"; }, 500);
+  }, 3000);
 }
 
+initSequentialPlaylist();
 initBGM();
 
-// 3. PIPER TTS ENGINE (Updated with Render Cloud Backend URL)
-async function speakText(text) {
+function speakText(text) {
   try {
-    if (currentPlayingAudio) {
-      currentPlayingAudio.pause();
-      currentPlayingAudio.currentTime = 0;
+    if (!('speechSynthesis' in window)) return;
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    const voices = window.speechSynthesis.getVoices();
+    const naturalVoice = voices.find(v => 
+      (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Neural')) && 
+      v.lang.startsWith('en')
+    ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+    
+    if (naturalVoice) {
+      utterance.voice = naturalVoice;
     }
-
-    const response = await fetchWithAuth(`https://michael-backend-foz7.onrender.com/api/tts?t=${Date.now()}`, {
-      method: "POST",
-      body: JSON.stringify({ text })
-    });
-
-    if (!response.ok) throw new Error("TTS bridge server error");
-
-    const blob = await response.blob();
-    const audioUrl = URL.createObjectURL(blob);
-    currentPlayingAudio = new Audio(audioUrl);
-    await currentPlayingAudio.play();
+    
+    utterance.rate = 1.65;
+    utterance.pitch = 1.0;
+    
+    window.speechSynthesis.speak(utterance);
   } catch (err) {
-    console.error("Piper Speech Error:", err);
+    console.error("Speech Synthesis Error:", err);
   }
 }
 
-// 4. CHAT AND COMMAND LOGIC
 const chatBox = document.getElementById("chatBox");
 const sendBtn = document.getElementById("sendBtn");
 const userInput = document.getElementById("userInput");
@@ -415,10 +438,8 @@ async function processUserCommand(text) {
     return;
   }
 
-  addMessage("michael", "Thinking...");
   const response = await runQuery(text);
   
-  chatBox.lastElementChild.remove();
   addMessage("michael", response);
   speakText(response);
 }
@@ -433,7 +454,6 @@ async function handleSendMessage() {
 sendBtn.onclick = handleSendMessage;
 userInput.onkeydown = (e) => { if (e.key === "Enter") handleSendMessage(); };
 
-// 5. STT (SPEECH-TO-TEXT) MICROPHONE CONTROL & WAKE WORD LISTENER ("Yo Michael")
 const micBtn = document.getElementById("micBtn");
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -489,9 +509,9 @@ if (SpeechRecognition) {
   micBtn.onclick = () => alert("Speech recognition unsupported in this browser.");
 }
 
-// 6. REAL-TIME & ZERO-DELAY DYNAMIC VISION ENGINE
 async function startVisionStream() {
   const toggleBtn = document.getElementById("toggleVisionBtn");
+  const recordBtn = document.getElementById("toggleRecordBtn");
   const visionStatus = document.getElementById("visionStatus");
   const liveFeedText = document.getElementById("liveFeedText");
 
@@ -509,6 +529,7 @@ async function startVisionStream() {
 
     liveVisionActive = true;
     if (toggleBtn) toggleBtn.textContent = "🛑 Stop Live Vision";
+    if (recordBtn) recordBtn.style.display = "inline-block";
     if (visionStatus) {
       visionStatus.textContent = "Live Feed: ACTIVE 🟢";
       visionStatus.style.color = "#55efc4";
@@ -522,6 +543,19 @@ async function startVisionStream() {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       const activeProfile = gameProfiles[currentGameKey];
+
+      if (currentGameKey === "ninetynine") {
+        if (!campfireData.isLocated && Math.random() < 0.05) {
+          const simulatedCoords = { x: Math.floor(Math.random() * 500), y: Math.floor(Math.random() * 500) };
+          saveCampfireLocation(simulatedCoords);
+          campfireData.isLocated = true;
+          campfireData.locationCoordinates = simulatedCoords;
+          campfireData.fuelLevel = 100;
+          
+          const fireText = document.getElementById("fireMeterText");
+          if (fireText) fireText.textContent = "Tracked (100%)";
+        }
+      }
 
       if (activeMode === "awaken") {
         const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -544,7 +578,7 @@ async function startVisionStream() {
             liveFeedText.textContent = `👁️ Sector Scan: ${activeProfile.name} tracking operational.`;
             requestAnimationFrame(processFrame);
           }
-        }, 3000);
+        }, 1000);
       }
     };
 
@@ -558,16 +592,24 @@ async function startVisionStream() {
 }
 
 function stopVisionStream() {
+  stopTacticalRecorder();
   liveVisionActive = false;
+  isRecordingActive = false;
   if (screenStream) {
     screenStream.getTracks().forEach(track => track.stop());
     screenStream = null;
   }
   const toggleBtn = document.getElementById("toggleVisionBtn");
+  const recordBtn = document.getElementById("toggleRecordBtn");
   const visionStatus = document.getElementById("visionStatus");
   const liveFeedText = document.getElementById("liveFeedText");
 
   if (toggleBtn) toggleBtn.textContent = "🎥 Start Live Vision";
+  if (recordBtn) {
+    recordBtn.style.display = "none";
+    recordBtn.textContent = "🔴 Record Session";
+    recordBtn.style.background = "#d63031";
+  }
   if (visionStatus) {
     visionStatus.textContent = "Live Feed: OFF";
     visionStatus.style.color = "#b2bec3";
@@ -583,10 +625,31 @@ document.getElementById("toggleVisionBtn").onclick = () => {
   else stopVisionStream();
 };
 
-// 7. GAME PROFILE SWITCHER LOGIC
+const recordBtn = document.getElementById("toggleRecordBtn");
+if (recordBtn) {
+  recordBtn.onclick = () => {
+    if (!isRecordingActive) {
+      const started = initTacticalRecorder(screenStream);
+      if (started) {
+        recordBtn.textContent = "⏹️ Stop Recording";
+        recordBtn.style.background = "#e17055";
+        isRecordingActive = true;
+        addMessage("michael", "Tactical session recording started. Debrief video will download on stop.");
+      }
+    } else {
+      stopTacticalRecorder();
+      recordBtn.textContent = "🔴 Record Session";
+      recordBtn.style.background = "#d63031";
+      isRecordingActive = false;
+      addMessage("michael", "Tactical session recording saved and exported.");
+    }
+  };
+}
+
 const gameSelect = document.getElementById("gameProfileSelect");
 const activeGameTitle = document.getElementById("activeGameTitle");
 const gameContextDesc = document.getElementById("gameContextDesc");
+const campfireHud = document.getElementById("campfireHud");
 
 if (gameSelect) {
   gameSelect.value = currentGameKey;
@@ -608,9 +671,20 @@ function updateGameUI(key) {
   const profile = gameProfiles[key];
   if (activeGameTitle) activeGameTitle.textContent = profile.name;
   if (gameContextDesc) gameContextDesc.textContent = profile.levelInfo;
+
+  if (campfireHud) {
+    if (key === "ninetynine") {
+      campfireHud.style.display = "block";
+      const fireText = document.getElementById("fireMeterText");
+      if (fireText) {
+        fireText.textContent = campfireData.isLocated ? "Tracked" : "Not Found";
+      }
+    } else {
+      campfireHud.style.display = "none";
+    }
+  }
 }
 
-// 8. SIDEBAR & VIEW NAVIGATION CONTROLS
 const sidebar = document.getElementById("slideSidebar");
 const toggleBtn = document.getElementById("sidebarToggleBtn");
 const closeBtn = document.getElementById("closeSidebarBtn");
@@ -649,18 +723,39 @@ const notesTextarea = document.getElementById("notesTextarea");
 notesTextarea.value = localStorage.getItem("michael_notes") || "";
 notesTextarea.oninput = () => localStorage.setItem("michael_notes", notesTextarea.value);
 
-// 9. SOUNDTRACK, PLAYLIST & VOLUME CONTROLS
-function setupAudioUploads() {
-  const audioInputs = {
-    bgm1AudioInput: { trackNum: 1, labelId: "bgm1FileName" },
-    bgm2AudioInput: { trackNum: 2, labelId: "bgm2FileName" },
-    bgm3AudioInput: { trackNum: 3, labelId: "bgm3FileName" },
-    regularAudioInput: { mode: "regular", labelId: "regularFileName" },
-    seriousAudioInput: { mode: "serious", labelId: "seriousFileName" },
-    awakenAudioInput: { mode: "awaken", labelId: "awakenFileName" }
-  };
+const clearMemoryModal = document.getElementById("clearMemoryModal");
+const openClearModalBtn = document.getElementById("openClearMemoryModalBtn");
+const confirmClearBtn = document.getElementById("confirmClearMemoryBtn");
+const cancelClearBtn = document.getElementById("cancelClearMemoryBtn");
 
-  // Load saved file names for UI display
+if (openClearModalBtn && clearMemoryModal) {
+  openClearModalBtn.onclick = () => {
+    clearMemoryModal.style.display = "flex";
+  };
+}
+
+if (cancelClearBtn && clearMemoryModal) {
+  cancelClearBtn.onclick = () => {
+    clearMemoryModal.style.display = "none";
+  };
+}
+
+if (confirmClearBtn && clearMemoryModal) {
+  confirmClearBtn.onclick = () => {
+    clearPermanentMemoryCompletely();
+    campfireData.isLocated = false;
+    campfireData.locationCoordinates = null;
+    const fireText = document.getElementById("fireMeterText");
+    if (fireText) fireText.textContent = "Not Found";
+
+    clearMemoryModal.style.display = "none";
+    const msg = "Permanent memory cleared successfully.";
+    addMessage("michael", msg);
+    speakText(msg);
+  };
+}
+
+function setupAudioUploads() {
   for (let i = 1; i <= 3; i++) {
     const savedName = localStorage.getItem(`michael_bgm_name_${i}`);
     const labelEl = document.getElementById(`bgm${i}FileName`);
@@ -673,7 +768,6 @@ function setupAudioUploads() {
     if (savedName && labelEl) labelEl.textContent = savedName;
   });
 
-  // Handle file selections for Michael-BGM1, 2, 3
   for (let i = 1; i <= 3; i++) {
     const inputEl = document.getElementById(`bgm${i}AudioInput`);
     const labelEl = document.getElementById(`bgm${i}FileName`);
@@ -698,7 +792,6 @@ function setupAudioUploads() {
     }
   }
 
-  // Handle standard mode audio files
   ["regular", "serious", "awaken"].forEach(mode => {
     const inputEl = document.getElementById(`${mode}AudioInput`);
     const labelEl = document.getElementById(`${mode}FileName`);
@@ -723,7 +816,6 @@ function setupAudioUploads() {
     }
   });
 
-  // Manual test buttons for BGM tracks
   document.getElementById("playBgm1Btn").onclick = () => { currentPlaylistIndex = 1; playNextPlaylistTrack(); };
   document.getElementById("playBgm2Btn").onclick = () => { currentPlaylistIndex = 2; playNextPlaylistTrack(); };
   document.getElementById("playBgm3Btn").onclick = () => { currentPlaylistIndex = 3; playNextPlaylistTrack(); };
@@ -732,7 +824,6 @@ function setupAudioUploads() {
   document.getElementById("playSeriousBtn").onclick = () => switchModeWithFeedback("serious");
   document.getElementById("playAwakenBtn").onclick = () => switchModeWithFeedback("awaken");
 
-  // Volume slider hookup
   const volumeSlider = document.getElementById("bgmVolumeSlider");
   const volumeLabel = document.getElementById("volumePercentageLabel");
 
@@ -786,7 +877,6 @@ function switchModeWithFeedback(mode) {
 
 setupAudioUploads();
 
-// 10. VISION AUTO-START PREFERENCE LOGIC
 const visionSelect = document.getElementById("visionAutoStartSelect");
 const visionHint = document.getElementById("visionModeHint");
 
@@ -812,11 +902,7 @@ if (visionSelect) {
 }
 
 if (savedVisionPref === "auto") {
-  window.addEventListener("DOMContentLoaded", () => {
-    setTimeout(() => {
-      startVisionStream();
-    }, 3500);
-  });
+  startVisionStream();
 }
 
 export { getAccessToken, fetchWithAuth };

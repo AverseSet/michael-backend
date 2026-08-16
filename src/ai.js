@@ -46,7 +46,8 @@ export async function runQuery(userPrompt) {
         "Authorization": `Bearer ${token}`
       },
       body: JSON.stringify({
-        prompt: userPrompt
+        prompt: userPrompt,
+        system_prompt: SYSTEM_PROMPT
       })
     });
 
@@ -60,5 +61,41 @@ export async function runQuery(userPrompt) {
   } catch (err) {
     console.error("AI Generation Failure:", err);
     return `Captain, chat error: ${err.message}`;
+  }
+}
+
+/**
+ * Executes a vision analysis query against your backend server
+ * @param {string} base64Image - Base64 encoded image data
+ * @param {string} prompt - Instructions for the AI
+ * @returns {Promise<string>} - Michael's tactical reading
+ */
+export async function analyzeScreen(base64Image, prompt) {
+  try {
+    const token = localStorage.getItem('michael_token') || '';
+    
+    const res = await fetch("https://michael-backend-foz7.onrender.com/vision", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        image: base64Image,
+        prompt: prompt,
+        system_prompt: SYSTEM_PROMPT
+      })
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`Server error (${res.status}): ${errorText}`);
+    }
+
+    const data = await res.json();
+    return (data.response || data.reply || data.message || "").trim();
+  } catch (err) {
+    console.error("AI Vision Failure:", err);
+    return null;
   }
 }

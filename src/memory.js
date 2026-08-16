@@ -43,3 +43,46 @@ export function rememberPlayer(player, data) {
 export function getPlayer(player) {
     return permanentMemory[player.toLowerCase()] || null;
 }
+
+// --- 99 NIGHTS CAMPFIRE & CLEAR PERMANENT MEMORY INTEGRATION ---
+
+const CAMPFIRE_KEY = 'michael_campfire_location';
+
+/**
+ * Saves the campfire coordinates into permanent memory.
+ * @param {Object} coords - The { x, y } coordinates of the campfire.
+ */
+export function saveCampfireLocation(coords) {
+    try {
+        localStorage.setItem(CAMPFIRE_KEY, JSON.stringify(coords));
+    } catch (err) {
+        console.error("[Memory] Failed to save campfire location:", err);
+    }
+}
+
+/**
+ * Retrieves the saved campfire coordinates from permanent memory.
+ * @returns {Object|null} - The coordinates object or null if not found.
+ */
+export function getCampfireLocation() {
+    try {
+        const saved = localStorage.getItem(CAMPFIRE_KEY);
+        return saved ? JSON.parse(saved) : null;
+    } catch (err) {
+        console.error("[Memory] Failed to retrieve campfire location:", err);
+        return null;
+    }
+}
+
+/**
+ * Completely clears all permanent memory structures, including campfire markers and player data.
+ */
+export function clearPermanentMemoryCompletely() {
+    try {
+        localStorage.removeItem(CAMPFIRE_KEY);
+        localStorage.removeItem("michael_perm_memory");
+        permanentMemory = {};
+    } catch (err) {
+        console.error("[Memory] Error clearing permanent memory:", err);
+    }
+}
