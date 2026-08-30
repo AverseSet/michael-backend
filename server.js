@@ -1,12 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
+import { GoogleGenAI } from '@google/genai';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+// Initialize Google Gen AI SDK for Vision
+const ai = new GoogleGenAI();
 
 // TEST / HEALTH CHECK ROUTE (Works for cron-job.org and browser checks)
 app.get('/', (req, res) => {
@@ -60,6 +64,39 @@ app.post('/chat', async (req, res) => {
   } catch (err) {
     console.error("[CHAT ERROR]:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// VISION ENDPOINT (Supports both browser GET test and POST app requests)
+app.all('/vision', async (req, res) => {
+  if (req.method === 'GET') {
+    return res.json({ status: 'online', message: 'Vision endpoint is active. Send a POST request with image data.' });
+  }
+
+  try {
+    const { image, prompt } = req.body;
+
+    if (!image) {
+      return res.status(400).json({ error: "Missing image data" });
+    }
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        { text: prompt || "Analyze this game screen:" },
+        {
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: image
+          }
+        }
+      ]
+    });
+
+    res.json({ response: response.text });
+  } catch (error) {
+    console.error("Vision processing error:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
