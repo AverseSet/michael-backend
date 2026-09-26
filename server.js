@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
-import { GoogleGenAI } from '@google/genai';
+import { randomUUID } from 'node:crypto';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,127 +9,161 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Initialize Google Gen AI SDK for Vision
-const ai = new GoogleGenAI();
-
-// TEST / HEALTH CHECK ROUTE (Works for cron-job.org and browser checks)
 app.get('/', (req, res) => {
   res.json({ status: 'online', message: 'Michael Backend Server is live and running!' });
 });
 
-// AUTHENTICATION ROUTES (Covers all possible frontend endpoint variations)
 const handleAuth = (req, res) => {
   const { accessKey } = req.body;
-  if (accessKey === 'AA') {
-    res.json({ token: 'michael_secure_token_123' });
-  } else {
-    res.status(401).json({ error: 'Invalid access key. Type "AA" to access.' });
+  const permanentKey = process.env.MICHAEL_PERMANENT_ACCESS_KEY;
+  if (typeof accessKey === 'string' && permanentKey && accessKey === permanentKey) {
+    res.json({ token: randomUUID(), permanent: true });
+    return;
   }
+
+  if (accessKey === 'AA') {
+    res.json({
+      token: randomUUID(),
+      permanent: false,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000
+    });
+    return;
+  }
+
+  res.status(401).json({ error: 'Invalid access key. Type "AA" to access.' });
 };
 
 app.post('/auth', handleAuth);
 app.post('/login', handleAuth);
 app.post('/api/auth', handleAuth);
 
-// CHAT ENDPOINT (Live Qwen 2.5 Integration)
+function getGeminiKey(body) {
+  return (body.apiKey || body.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
+}
+
+function getGeminiText(data) {
+  return data?.candidates?.[0]?.content?.parts
+    ?.map((part) => part?.text || '')
+    .join('')
+    .trim() || '';
+}
+
+async function callGemini(key, parts) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts }] })
+    }
+  );
+
+  const data = await response.json();
+  return { response, data };
+}
+
 app.post('/chat', async (req, res) => {
   try {
-    const { prompt } = req.body;
-    console.log(`[CHAT RECEIVED] Prompt: ${prompt}`);
+    const key = getGeminiKey(req.body);
+    const prompt = req.body.prompt || req.body.message || '';
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "qwen/qwen-2.5-7b-instruct",
-        messages: [
-          { role: "system", content: "You are Michael, a helpful AI assistant and companion." },
-          { role: "user", content: prompt }
-        ]
-      })
-    });
-
-    const data = await response.json();
-    
-    if (data.choices && data.choices.length > 0) {
-      const reply = data.choices[0].message.content;
-      res.json({ response: reply });
-    } else {
-      res.status(500).json({ error: "Failed to get response from Qwen API", details: data });
+    if (!prompt) {
+      res.status(400).json({ error: 'Missing prompt text.' });
+      return;
+    }
+    if (!key) {
+      res.status(401).json({ error: 'Missing Gemini API key.' });
+      return;
     }
 
-  } catch (err) {
-    console.error("[CHAT ERROR]:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
+    const { response, data } = await callGemini(key, [{
+      text: `You are Michael, a tactical AI co-pilot for Roblox games.\n\nUser: ${prompt}`
+    }]);
 
-// VISION ENDPOINT (Supports both browser GET test and POST app requests)
-app.all('/vision', async (req, res) => {
-  if (req.method === 'GET') {
-    return res.json({ status: 'online', message: 'Vision endpoint is active. Send a POST request with image data.' });
-  }
-
-  try {
-    const { image, prompt } = req.body;
-
-    if (!image) {
-      return res.status(400).json({ error: "Missing image data" });
+    if (!response.ok) {
+      res.status(response.status).json({
+        error: data?.error?.message || 'Gemini chat request failed.',
+        details: data
+      });
+      return;
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        { text: prompt || "Analyze this game screen:" },
-        {
-          inlineData: {
-            mimeType: 'image/jpeg',
-            data: image
-          }
-        }
-      ]
-    });
+    const reply = getGeminiText(data);
+    if (!reply) {
+      res.status(502).json({ error: 'Gemini returned no text content.' });
+      return;
+    }
 
-    res.json({ response: response.text });
+    res.json({ response: reply });
   } catch (error) {
-    console.error("Vision processing error:", error);
+    console.error('[CHAT ERROR]:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// TTS ENDPOINT (Cloud-safe implementation preventing 500 crashes)
-app.post('/api/tts', async (req, res) => {
+app.all('/vision', async (req, res) => {
+  if (req.method === 'GET') {
+    res.json({ status: 'online', message: 'Vision endpoint is active. Send a POST request with image data.' });
+    return;
+  }
+
   try {
-    const { text } = req.body;
-    if (!text) {
-      return res.status(400).json({ error: 'Text is required' });
+    const { image, prompt } = req.body;
+    const key = getGeminiKey(req.body);
+
+    if (!image) {
+      res.status(400).json({ error: 'Missing image data' });
+      return;
     }
-    
-    res.status(501).json({ error: 'Server TTS binary not configured on cloud environment. Use browser fallback.' });
-  } catch (err) {
-    console.error('[TTS ERROR]:', err);
-    res.status(500).json({ error: err.message });
+    if (!key) {
+      res.status(401).json({ error: 'Missing Gemini API key.' });
+      return;
+    }
+
+    const { response, data } = await callGemini(key, [
+      { text: prompt || 'Analyze this game screen:' },
+      {
+        inline_data: {
+          mime_type: 'image/jpeg',
+          data: image
+        }
+      }
+    ]);
+
+    if (!response.ok) {
+      res.status(response.status).json({
+        error: data?.error?.message || 'Gemini vision request failed.',
+        details: data
+      });
+      return;
+    }
+
+    res.json({ response: getGeminiText(data) || 'No analysis returned.' });
+  } catch (error) {
+    console.error('[VISION ERROR]:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// CATCH-ALL 404 HANDLER (Ensures missing routes return clean JSON instead of HTML)
+app.post('/api/tts', (req, res) => {
+  const { text } = req.body;
+  if (!text) {
+    res.status(400).json({ error: 'Text is required' });
+    return;
+  }
+
+  res.status(501).json({ error: 'Server TTS is not configured. Use native device speech.' });
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
-// GLOBAL ERROR HANDLER (Prevents HTML stack traces on server crash)
-app.use((err, req, res, next) => {
-  console.error('[SERVER CRASH ERROR]:', err);
-  res.status(500).json({ error: 'Internal server error', details: err.message });
+app.use((error, req, res, next) => {
+  console.error('[SERVER ERROR]:', error);
+  res.status(500).json({ error: 'Internal server error', details: error.message });
 });
 
-// START SERVER
 app.listen(PORT, '0.0.0.0', () => {
-  console.log('--------------------------------------------------');
-  console.log(`✖ Michael Backend Server running on port ${PORT}`);
-  console.log(`🌐 Ready for universal mobile connections`);
-  console.log('--------------------------------------------------');
+  console.log(`Michael Backend Server running on port ${PORT}`);
 });

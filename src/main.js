@@ -1,10 +1,13 @@
 import "./style.css";
-import { runQuery } from "./ai.js";
+import { hasGeminiApiKey, runQuery, saveGeminiApiKey } from "./ai.js";
 import { handleCommand } from "./commands.js";
 import { initBGM, setBGMMode, stopBGM } from "./bgm.js";
 import { gameProfiles } from "./gamesConfig.js";
 import { saveCampfireLocation, getCampfireLocation, clearPermanentMemoryCompletely } from "./memory.js";
 import { initTacticalRecorder, stopTacticalRecorder } from "./recorder.js";
+import { Capacitor } from "@capacitor/core";
+import { SpeechRecognition as NativeSpeechRecognition } from "@capacitor-community/speech-recognition";
+import { SpeechSynthesis as NativeSpeechSynthesis } from "@capgo/capacitor-speech-synthesis";
 
 // --- TOKEN & AUTH HELPER ---
 const TOKEN_KEY = 'michael_token';
@@ -242,6 +245,12 @@ document.querySelector("#app").innerHTML = `
         <div id="settingsPage" class="page-view">
           <h2>⚙️ System & Audio Settings</h2>
 
+          <div class="setting-group" style="background: #181824; padding: 15px; border-radius: 8px; border: 1px solid #6c5ce7; margin: 15px 0 20px;">
+            <label style="color: #a29bfe; font-weight: bold; display: block; margin-bottom: 5px;">Gemini API Key</label>
+            <p id="geminiKeyStatus" style="color: #b2bec3; font-size: 0.85rem; margin-bottom: 10px;">Michael will ask for your key when you send your first message.</p>
+            <button id="manageGeminiKeyBtn" class="action-btn">Set or Change Gemini Key</button>
+          </div>
+
           <div class="setting-group" style="background: #181824; padding: 15px; border-radius: 8px; border: 1px solid #d63031; margin-bottom: 20px;">
             <label style="color: #ff7675; font-weight: bold; display: block; margin-bottom: 5px;">⚠️ Permanent Memory Management</label>
             <p style="color: #b2bec3; font-size: 0.85rem; margin-bottom: 10px;">Wipe permanent long-term memory data (such as campfire location anchors and saved player states).</p>
@@ -345,6 +354,19 @@ document.querySelector("#app").innerHTML = `
       </div>
     </div>
   </div>
+
+  <div id="geminiKeyModal" role="dialog" aria-modal="true" aria-labelledby="geminiKeyTitle" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 10000; justify-content: center; align-items: center; padding: 20px;">
+    <div style="width: min(100%, 420px); background: #1e1e2f; border: 1px solid #6c5ce7; border-radius: 12px; padding: 22px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+      <h2 id="geminiKeyTitle" style="color: #a29bfe; margin-bottom: 10px;">Gemini API Key</h2>
+      <p style="color: #fff; line-height: 1.5; margin-bottom: 14px;">Enter your Gemini API key to send this message. It will be saved on this device.</p>
+      <input id="geminiKeyInput" type="password" autocomplete="off" placeholder="Paste your Gemini API key" style="width: 100%; padding: 12px; color: #fff; background: #0f0f17; border: 1px solid #6c5ce7; border-radius: 8px;" />
+      <p id="geminiKeyError" role="alert" style="color: #ff7675; min-height: 20px; margin-top: 8px;"></p>
+      <div style="display: flex; gap: 10px;">
+        <button id="saveGeminiKeyBtn" class="action-btn" style="flex: 1;">Save &amp; Send</button>
+        <button id="cancelGeminiKeyBtn" class="action-btn" style="flex: 1; background: #2d2d42;">Cancel</button>
+      </div>
+    </div>
+  </div>
 `;
 
 const loader = document.getElementById("loader");
@@ -373,29 +395,48 @@ if (loader) {
 initSequentialPlaylist();
 initBGM();
 
-function speakText(text) {
+async function speakText(text) {
   try {
+    if (Capacitor.isNativePlatform()) {
+      await NativeSpeechSynthesis.cancel();
+      const { voices } = await NativeSpeechSynthesis.getVoices();
+      const englishVoices = Array.isArray(voices) ? voices.filter((voice) => (voice.language || '').toLowerCase().startsWith('en')) : [];
+
+      const maleVoice = englishVoices.find((voice) => (voice.gender || '').toLowerCase() === 'male')
+        || englishVoices.find((voice) => /(male|david|mark|daniel|alex|guy|george|michael|-tpd\b)/i.test(`${voice.name || ''} ${voice.id || ''}`))
+        || englishVoices[0];
+
+      const voice = maleVoice || englishVoices[0];
+
+      await NativeSpeechSynthesis.speak({
+        text,
+        language: voice?.language || 'en-US',
+        voiceId: voice?.id,
+        rate: 1.0,
+        pitch: 0.9,
+        volume: 1,
+        queueStrategy: 'Flush'
+      });
+      return;
+    }
+
     if (!('speechSynthesis' in window)) return;
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    
     const voices = window.speechSynthesis.getVoices();
-    const naturalVoice = voices.find(v => 
-      (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Neural')) && 
-      v.lang.startsWith('en')
-    ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
-    
-    if (naturalVoice) {
-      utterance.voice = naturalVoice;
-    }
-    
-    utterance.rate = 1.65;
-    utterance.pitch = 1.0;
-    
+    const maleVoice = voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('en') && ((voice.name || '').toLowerCase().includes('male') || (voice.voiceURI || '').toLowerCase().includes('male')))
+      || voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('en') && (voice.name || '').toLowerCase().includes('david'))
+      || voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('en') && (voice.name || '').toLowerCase().includes('male'))
+      || voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('en') && (voice.name || '').toLowerCase().includes('natural'))
+      || voices.find((voice) => (voice.lang || '').toLowerCase().startsWith('en'));
+
+    if (maleVoice) utterance.voice = maleVoice;
+    utterance.rate = 1.0;
+    utterance.pitch = 0.9;
     window.speechSynthesis.speak(utterance);
   } catch (err) {
-    console.error("Speech Synthesis Error:", err);
+    console.error('Speech Synthesis Error:', err);
   }
 }
 
@@ -423,9 +464,8 @@ function addMessage(sender, text) {
 async function processUserCommand(text) {
   if (!text) return;
 
-  addMessage("user", text);
-
   if (text.toLowerCase().startsWith("!mode ")) {
+    addMessage("user", text);
     const requestedMode = text.split(" ")[1].toLowerCase();
     switchModeWithFeedback(requestedMode);
     return;
@@ -433,11 +473,22 @@ async function processUserCommand(text) {
 
   const commandResult = handleCommand(text);
   if (commandResult) {
+    addMessage("user", text);
     addMessage("michael", commandResult);
     speakText(commandResult);
     return;
   }
 
+  if (!hasGeminiApiKey()) {
+    userInput.value = text;
+    geminiKeyInput.value = "";
+    geminiKeyError.textContent = "";
+    geminiKeyModal.style.display = "flex";
+    geminiKeyInput.focus();
+    return;
+  }
+
+  addMessage("user", text);
   const response = await runQuery(text);
   
   addMessage("michael", response);
@@ -454,10 +505,113 @@ async function handleSendMessage() {
 sendBtn.onclick = handleSendMessage;
 userInput.onkeydown = (e) => { if (e.key === "Enter") handleSendMessage(); };
 
+const geminiKeyModal = document.getElementById("geminiKeyModal");
+const geminiKeyInput = document.getElementById("geminiKeyInput");
+const geminiKeyError = document.getElementById("geminiKeyError");
+const geminiKeyStatus = document.getElementById("geminiKeyStatus");
+const manageGeminiKeyBtn = document.getElementById("manageGeminiKeyBtn");
+const saveGeminiKeyBtn = document.getElementById("saveGeminiKeyBtn");
+const cancelGeminiKeyBtn = document.getElementById("cancelGeminiKeyBtn");
+
+function updateGeminiKeyStatus() {
+  if (geminiKeyStatus) {
+    geminiKeyStatus.textContent = hasGeminiApiKey()
+      ? "A Gemini key is saved on this device."
+      : "Michael will ask for your key when you send your first message.";
+  }
+}
+
+if (manageGeminiKeyBtn) {
+  manageGeminiKeyBtn.onclick = () => {
+    geminiKeyInput.value = "";
+    geminiKeyError.textContent = "";
+    geminiKeyModal.style.display = "flex";
+    geminiKeyInput.focus();
+  };
+}
+
+if (saveGeminiKeyBtn) {
+  saveGeminiKeyBtn.onclick = async () => {
+    const apiKey = geminiKeyInput.value.trim();
+    if (!apiKey) {
+      geminiKeyError.textContent = "Please enter your Gemini API key.";
+      geminiKeyInput.focus();
+      return;
+    }
+
+    saveGeminiApiKey(apiKey);
+    updateGeminiKeyStatus();
+    geminiKeyModal.style.display = "none";
+    await handleSendMessage();
+  };
+}
+
+if (geminiKeyInput) {
+  geminiKeyInput.onkeydown = (event) => {
+    if (event.key === "Enter") saveGeminiKeyBtn.click();
+  };
+}
+
+if (cancelGeminiKeyBtn) {
+  cancelGeminiKeyBtn.onclick = () => {
+    geminiKeyModal.style.display = "none";
+  };
+}
+
+updateGeminiKeyStatus();
+
 const micBtn = document.getElementById("micBtn");
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-if (SpeechRecognition) {
+if (Capacitor.isNativePlatform()) {
+  let nativeListening = false;
+
+  const stopNativeRecognition = async () => {
+    if (!nativeListening) return;
+    nativeListening = false;
+    micBtn.classList.remove("listening");
+    micBtn.textContent = "🎤";
+    await NativeSpeechRecognition.stop().catch((err) => {
+      console.error("Native speech stop failed:", err);
+    });
+  };
+
+  micBtn.onclick = async () => {
+    if (nativeListening) {
+      await stopNativeRecognition();
+      return;
+    }
+
+    try {
+      const permission = await NativeSpeechRecognition.requestPermissions();
+      if (permission.speechRecognition !== "granted") {
+        throw new Error("Microphone permission was not granted.");
+      }
+
+      const { available } = await NativeSpeechRecognition.available();
+      if (!available) {
+        throw new Error("Speech recognition is not available on this device.");
+      }
+
+      nativeListening = true;
+      micBtn.classList.add("listening");
+      micBtn.textContent = "🎙️";
+      const result = await NativeSpeechRecognition.start({
+        language: "en-US",
+        maxResults: 1,
+        partialResults: false,
+        popup: false
+      });
+      const transcript = result.matches?.[0]?.trim();
+      if (transcript) await processUserCommand(transcript);
+    } catch (err) {
+      console.error("Native speech recognition failed:", err);
+      addMessage("michael", `Microphone error: ${err.message}`);
+    } finally {
+      await stopNativeRecognition();
+    }
+  };
+} else if (SpeechRecognition) {
   const recognition = new SpeechRecognition();
   recognition.continuous = true;
   recognition.interimResults = true;
@@ -587,6 +741,10 @@ async function startVisionStream() {
     screenStream.getVideoTracks()[0].onended = () => stopVisionStream();
   } catch (err) {
     console.error("Screen vision capture failed:", err);
+    addMessage(
+      "michael",
+      "Screen sharing is unavailable in this Android build. Android needs a native MediaProjection capture bridge; browser screen sharing works only where the WebView supports getDisplayMedia."
+    );
     stopVisionStream();
   }
 }

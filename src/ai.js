@@ -9,9 +9,9 @@ PERSONALITY & VOICE:
 
 BLOX FRUITS KNOWLEDGE BASE:
 1. SEA PROGRESSION:
-   - Sea 1 (First Sea): Levels 1–700. Focus on level grinding. Key islands: Starter (1-10), Jungle (15-30), Pirate Village (30-60), Desert (60-90), Middle Town (100), Frozen Village (90-120) [Aura, Flash Step, Air Jump], Marine Fortress (120-150), Skypiea (150-200), Prison (190-275), Magma Village (300-375), Underwater City (375-450), Fountain City (625-700).
-   - Sea 2 (Second Sea): Levels 700–1500. Focus on fruit awakening and fighting styles. Key mechanics: Raids (Hot and Cold), Trading (Cafe), V2/V3 Race Upgrades. Best grinding fruit: Buddha (Awakened).
-   - Sea 3 (Third Sea): Levels 1500–2550+. Focus on End-game PVP, Race V4, Sea Events (Leviathan, Terror Shark), Dough King, Rip Indra. Key locations: Castle on the Sea, Haunted Castle, Sea of Treats, Tiki Outpost.
+   - Sea 1 (First Sea): Levels 1?700. Focus on level grinding. Key islands: Starter (1-10), Jungle (15-30), Pirate Village (30-60), Desert (60-90), Middle Town (100), Frozen Village (90-120) [Aura, Flash Step, Air Jump], Marine Fortress (120-150), Skypiea (150-200), Prison (190-275), Magma Village (300-375), Underwater City (375-450), Fountain City (625-700).
+   - Sea 2 (Second Sea): Levels 700?1500. Focus on fruit awakening and fighting styles. Key mechanics: Raids (Hot and Cold), Trading (Cafe), V2/V3 Race Upgrades. Best grinding fruit: Buddha (Awakened).
+   - Sea 3 (Third Sea): Levels 1500?2550+. Focus on End-game PVP, Race V4, Sea Events (Leviathan, Terror Shark), Dough King, Rip Indra. Key locations: Castle on the Sea, Haunted Castle, Sea of Treats, Tiki Outpost.
 
 2. FRUIT TIER LIST (OVERVIEW):
    - S-Tier (PvP): Dough (Awakened), Portal, Kitsune, Dragon, Leopard.
@@ -30,72 +30,107 @@ BLOX FRUITS KNOWLEDGE BASE:
 Maintain this tactical AI co-pilot identity at all times. Give direct, actionable answers.
 `;
 
+export function hasGeminiApiKey() {
+  return Boolean((localStorage.getItem('gemini_api_key') || '').trim());
+}
+
+export function saveGeminiApiKey(apiKey) {
+  localStorage.setItem('gemini_api_key', apiKey.trim());
+}
+
+function getGeminiApiKey() {
+  return (localStorage.getItem('gemini_api_key') || '').trim();
+}
+
+function parseGeminiText(payload) {
+  const text = payload?.candidates?.[0]?.content?.parts
+    ?.map((part) => part?.text || '')
+    .join('')
+    .trim();
+
+  if (text) return text;
+  return payload?.text || payload?.response || '';
+}
+
 /**
- * Executes a query against your backend server
+ * Executes a query against the Gemini API using the user's API key.
  * @param {string} userPrompt - Prompt typed or spoken by the user
  * @returns {Promise<string>} - Michael's response
  */
 export async function runQuery(userPrompt) {
   try {
-    const token = localStorage.getItem('michael_token') || '';
-    
-    const res = await fetch("https://michael-backend-foz7.onrender.com/chat", {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) {
+      throw new Error('Gemini API key missing. Please enter your API key first.');
+    }
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        prompt: userPrompt,
-        system_prompt: SYSTEM_PROMPT
+        contents: [{
+          parts: [{ text: `${SYSTEM_PROMPT}
+
+User: ${userPrompt}` }]
+        }]
       })
     });
 
+    const data = await res.json();
     if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Server error (${res.status}): ${errorText}`);
+      const errorMessage = data?.error?.message || JSON.stringify(data);
+      throw new Error(`Gemini API error (${res.status}): ${errorMessage}`);
     }
 
-    const data = await res.json();
-    return (data.response || data.reply || data.message || "").trim();
+    const text = parseGeminiText(data);
+    return (text || '').trim();
   } catch (err) {
-    console.error("AI Generation Failure:", err);
+    console.error('AI Generation Failure:', err);
     return `Captain, chat error: ${err.message}`;
   }
 }
 
 /**
- * Executes a vision analysis query against your backend server
+ * Executes a vision analysis query against the Gemini API.
  * @param {string} base64Image - Base64 encoded image data
  * @param {string} prompt - Instructions for the AI
  * @returns {Promise<string>} - Michael's tactical reading
  */
 export async function analyzeScreen(base64Image, prompt) {
   try {
-    const token = localStorage.getItem('michael_token') || '';
-    
-    const res = await fetch("https://michael-backend-foz7.onrender.com/vision", {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) {
+      throw new Error('Gemini API key missing.');
+    }
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        image: base64Image,
-        prompt: prompt,
-        system_prompt: SYSTEM_PROMPT
+        contents: [{
+          parts: [
+            { text: prompt || 'Analyze this game screen:' },
+            {
+              inline_data: {
+                mime_type: 'image/jpeg',
+                data: base64Image
+              }
+            }
+          ]
+        }]
       })
     });
 
+    const data = await res.json();
     if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Server error (${res.status}): ${errorText}`);
+      const errorMessage = data?.error?.message || JSON.stringify(data);
+      throw new Error(`Gemini vision error (${res.status}): ${errorMessage}`);
     }
 
-    const data = await res.json();
-    return (data.response || data.reply || data.message || "").trim();
+    const text = parseGeminiText(data);
+    return (text || '').trim();
   } catch (err) {
-    console.error("AI Vision Failure:", err);
+    console.error('AI Vision Failure:', err);
     return null;
   }
 }
