@@ -6,6 +6,13 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
+:root {
+  --button-orange: #e17055;
+  --button-orange-hover: #d35400;
+  --button-orange-pressed: #ba4a00;
+  --button-orange-glow: rgba(225, 112, 85, 0.35);
+}
+
 body {
   background-color: #0f0f17;
   color: #f1f2f6;
@@ -97,10 +104,10 @@ body {
 }
 
 .tab-btn.active {
-  background: #6c5ce7;
+  background: var(--button-orange);
   color: #fff;
-  border-color: #6c5ce7;
-  box-shadow: 0 0 10px rgba(108, 92, 231, 0.4);
+  border-color: var(--button-orange);
+  box-shadow: 0 0 10px var(--button-orange-glow);
 }
 
 /* MAIN VIEWS */
@@ -194,7 +201,7 @@ body {
 }
 
 .input-area button {
-  background: #6c5ce7;
+  background: var(--button-orange);
   color: #fff;
   border: none;
   padding: 0 20px;
@@ -205,7 +212,7 @@ body {
 }
 
 .input-area button:hover {
-  background: #5b4bc4;
+  background: var(--button-orange-hover);
 }
 
 /* MIC BUTTON */
@@ -216,14 +223,14 @@ body {
 }
 
 #micBtn.listening {
-  background: #e74c3c;
+  background: var(--button-orange-hover);
   animation: pulse 1.2s infinite;
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
-  70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+  0% { box-shadow: 0 0 0 0 var(--button-orange-glow); }
+  70% { box-shadow: 0 0 0 10px rgba(225, 112, 85, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(225, 112, 85, 0); }
 }
 
 /* NOTES & SETTINGS PAGE */
@@ -255,7 +262,7 @@ textarea:focus {
 }
 
 .mute-btn {
-  background: #d63031;
+  background: var(--button-orange);
   color: #fff;
   border: none;
   padding: 10px 15px;
@@ -305,8 +312,8 @@ input[type="file"]::file-selector-button {
 
 /* Hover state for the file chooser button */
 input[type="file"]::file-selector-button:hover {
-  background-color: #0984e3;
-  border-color: #74b9ff;
+  background-color: var(--button-orange-hover);
+  border-color: var(--button-orange);
   color: #ffffff;
 }
 
@@ -338,8 +345,55 @@ input[type="file"]::file-selector-button:hover {
 .custom-select:focus {
   border-color: #6c5ce7;
 }
+
+@media (max-width: 600px) {
+  .live-vision-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .live-vision-actions {
+    flex-wrap: wrap;
+  }
+}
+
+#floatingOverlayHelp {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.floating-overlay-help-card {
+  width: min(100%, 380px);
+  padding: 22px;
+  border: 1px solid #6c5ce7;
+  border-radius: 14px;
+  background: #1e1e2f;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.floating-overlay-help-card h2 {
+  margin-bottom: 10px;
+  color: #a29bfe;
+}
+
+.floating-overlay-help-card p {
+  color: #dfe6e9;
+  line-height: 1.5;
+}
+
+.floating-overlay-help-card button {
+  width: 100%;
+  margin-top: 14px;
+}
+
 .action-btn {
-  background-color: #e17055;
+  background-color: var(--button-orange);
   color: #ffffff;
   border: none;
   padding: 8px 16px;
@@ -357,8 +411,70 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .action-btn:hover {
-  background-color: #d63031;
+  background-color: var(--button-orange-hover);
 }
+
+.action-btn:active,
+.input-area button:active,
+.mute-btn:active,
+.tab-btn:active,
+.sidebar-nav button:active,
+#sidebarToggleBtn:active {
+  background-color: var(--button-orange-pressed);
+}
+
+button:active {
+  background-color: var(--button-orange-pressed) !important;
+  border-color: var(--button-orange-pressed);
+}
+
+button:focus-visible,
+input[type="file"]::file-selector-button:focus-visible {
+  outline: 2px solid var(--button-orange);
+  outline-offset: 2px;
+}
+
+.action-btn.recording {
+  background-color: var(--button-orange-hover);
+}
+
+.action-btn.recording:hover {
+  background-color: var(--button-orange-pressed);
+}
+
+.among-us-hud {
+  margin: 0 0 15px;
+  padding: 12px 15px;
+  border: 1px solid #6c5ce7;
+  border-radius: 8px;
+  background: #181824;
+  color: #f1f2f6;
+}
+
+.among-us-hud[hidden] {
+  display: none;
+}
+
+.among-us-hud > strong {
+  color: #a29bfe;
+}
+
+.among-us-hud p {
+  margin-top: 7px;
+  color: #dfe6e9;
+  font-size: 0.9rem;
+}
+
+.among-us-hud small {
+  display: block;
+  margin-top: 8px;
+  color: #b2bec3;
+}
+
+.among-us-suspect {
+  font-weight: 600;
+}
+
 /* Sliding Taskbar / Sidebar Styling */
 .app-container {
   display: flex;
@@ -413,7 +529,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .sidebar-nav button:hover, .sidebar-nav button.active {
-  background: #6c5ce7;
+  background: var(--button-orange);
   color: #fff;
 }
 
@@ -426,6 +542,10 @@ input[type="file"]::file-selector-button:hover {
   border-radius: 6px;
   cursor: pointer;
   font-size: 1rem;
+}
+
+#sidebarToggleBtn:hover {
+  border-color: var(--button-orange);
 }
 
 /* Main Content Wrapper adjustment when sidebar toggles */
