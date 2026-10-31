@@ -1,6 +1,5 @@
 // src/liveVision.js
 import { analyzeScreen } from "./ai.js";
-import { saveCampfireLocation } from "./memory.js";
 
 let stream = null;
 let captureInterval = null;
@@ -11,7 +10,7 @@ let isProcessing = false;
  * @param {Function} onUpdateCallback - Function to execute when a new tactical reading is ready
  * @param {number} intervalMs - Frequency of screen capture in milliseconds (default: 5000ms)
  */
-export async function startLiveVision(onUpdateCallback, intervalMs = 5000) {
+export async function startLiveVision(onUpdateCallback, intervalMs = 15000) {
   if (stream) return; // Already running[cite: 5]
 
   try {
@@ -47,17 +46,18 @@ export async function startLiveVision(onUpdateCallback, intervalMs = 5000) {
         "Live game feed. Short tactical update (max 2 sentences). " +
         "Identify player health status, equipped fruit/weapon, active enemies, immediate combat threats, or 99 Nights campfire location.";
 
-      const update = await analyzeScreen(base64Image, tacticalPrompt);
-      isProcessing = false;
-
-      // Simulated 99 Nights Campfire Anchor Check Integration
-      if (Math.random() < 0.05) {
-        const simulatedCoords = { x: Math.floor(Math.random() * 500), y: Math.floor(Math.random() * 500) };
-        saveCampfireLocation(simulatedCoords);
-      }
-
-      if (update && onUpdateCallback) {
-        onUpdateCallback(update);
+      try {
+        const update = await analyzeScreen(base64Image, tacticalPrompt);
+        if (update && onUpdateCallback) {
+          onUpdateCallback(update);
+        }
+      } catch (error) {
+        console.error("Live screen analysis failed:", error);
+        if (onUpdateCallback) {
+          onUpdateCallback(`Live screen analysis failed: ${error.message}`);
+        }
+      } finally {
+        isProcessing = false;
       }
     }, intervalMs);
 
